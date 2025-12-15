@@ -8,8 +8,8 @@ analog and digital quantum computing resource requirements.
 from typing import Dict, Optional, Union
 import json
 from datetime import datetime
-from analog_simulator import AnalogSimulator
-from digital_resource_estimator import DigitalResourceEstimator
+from library.analog_simulator import AnalogSimulator
+from library.digital_resource_estimator import DigitalResourceEstimator
 
 
 def generate_comparison_report(
