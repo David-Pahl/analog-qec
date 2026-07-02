@@ -213,7 +213,8 @@ def _add_star_point(
     )
     H_clifford_star = N_clifford_clock_star * P_clifford_clock_star
     H_star = H_rotation_star + H_clifford_star
-    T_depth_star = star_rotation_depth * distance
+    T_depth_star = star_rotation_depth * distance * surface.t_cycle
+    T2_limit_star = benchmark.n_logical * T_depth_star / H_star
     n_phys = star_compact_physical_qubits(benchmark.n_logical, distance)
     nT_star = n_phys * T_depth_star
 
@@ -227,6 +228,11 @@ def _add_star_point(
             d=distance,
             p_phys=p_phys,
             n_logical=benchmark.n_logical,
+            T_arch=T_depth_star,
+            T2_limit=T2_limit_star,
+            T_arch_units="us",
+            T2_limit_units="us",
+            limiting_lifetime_model="equivalent STAR operation-error lifetime",
             n_active_lattice_sites=benchmark.lattice_shape[0] * benchmark.lattice_shape[1],
             lattice_shape=benchmark.lattice_shape,
             n_edges=n_edges,
@@ -239,6 +245,8 @@ def _add_star_point(
             H_clifford=H_clifford_star,
             P_rot=P_rot_star,
             rotation_depth=star_rotation_depth,
+            rotation_depth_clocks=star_rotation_depth,
+            t_cycle_us=surface.t_cycle,
             T_depth=T_depth_star,
         )
     )

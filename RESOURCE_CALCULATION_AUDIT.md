@@ -39,11 +39,13 @@ rotation and logical-Clifford error models and plots
 H_\mathrm{STAR}=H_\mathrm{rot}+H_\mathrm{Cliff}.
 ```
 
-The y-axis is the space-time overhead `nT`. In the current code this is a
-phenomenological comparison quantity. Raw and EPS use analog evolution time in
-microseconds, while STAR and Surface code use circuit depth or code-cycle-like
-units. The file therefore compares scaling regimes, not a fully dimensionally
-homogeneous wall-clock resource.
+The y-axis is the space-time overhead `nT` in physical-qubit-microseconds.
+Raw and EPS use the analog evolution time directly. Surface-code and STAR
+depths are first counted in QEC cycles or STAR clocks and then converted to
+microseconds with the QEC cycle time. In the current default configuration
+`t_cycle = 1`, interpreted as `1 us`, so the cycle-depth numbers are
+numerically equal to microseconds. If `t_cycle` is changed, Surface-code and
+STAR space-time overheads should scale by that factor.
 
 ## Source of Truth
 
@@ -53,7 +55,7 @@ homogeneous wall-clock resource.
 | Failure probability | `metrics.failure_probability` | `P_fail = 1 - exp(-H)` |
 | Multiplicative overhead | `metrics.overhead` | `multiplier * value` |
 | Rotated surface-code memory area | `metrics.surface_code_n_memory` | `2*d**2 - 1` |
-| Surface-code execution time | `metrics.surface_code_T` | `T_gate_depth * d * t_cycle` |
+| Surface-code execution time | `metrics.surface_code_T` | `T_gate_depth * d * t_cycle_us` |
 | Surface-code logical lifetime | `metrics.surface_code_Tlogical` | `T3 * (Lambda/reference_Lambda)^2 * Lambda^((d-3)/2)` |
 | Lattice edge count | `metrics.lattice_edge_count` | `rows*(cols-1) + cols*(rows-1)` |
 | STAR rotation count | `metrics.star_rotation_count` | `n_steps * n_edges * rotations_per_edge` |
@@ -245,17 +247,22 @@ Space-time overhead:
 ```math
 n_\mathrm{phys}=(1.5n_\mathrm{logical}+5)2d^2,
 \qquad
-T_\mathrm{depth}=11520d,
+T_\mathrm{depth,us}=11520d\,t_\mathrm{cycle,us},
 \qquad
-nT=n_\mathrm{phys}T_\mathrm{depth}.
+nT=n_\mathrm{phys}T_\mathrm{depth,us}.
 ```
+
+With the current default `t_cycle = 1 us`, this gives the same numerical values
+as the previous cycle-depth table. If a different QEC cycle time is used, all
+STAR `T_depth` and `nT` values scale linearly with it. The STAR error exponent
+itself remains an operation-budget exponent, not a coherence-time exponent.
 
 The compact-patch count is backed by Akahoshi et al., Sec. V, which states that
 the compact block requires `1.5n+5` logical patches to allocate `n` data logical
 qubits, and by Sec. VI C, which uses approximately `2d^2` physical qubits per
 logical patch.
 
-| `p` | `d` | `H_rot` | `H_Cliff` | `H` | `P_fail` | `n_phys` | `T_depth` | `nT` |
+| `p` | `d` | `H_rot` | `H_Cliff` | `H` | `P_fail` | `n_phys` | `T_depth_us` | `nT` |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 5e-5 | 3 | 0.181333 | 0.268227 | 0.449561 | 0.362092 | 1,440 | 34,560 | 49,766,400 |
 | 5e-5 | 5 | 0.181333 | 0.003352 | 0.184685 | 0.168634 | 4,000 | 57,600 | 230,400,000 |
@@ -294,7 +301,7 @@ H=0.3633377.
 ```math
 n_\mathrm{phys}=(1.5*50+5)*2*7^2=7840,
 \qquad
-T_\mathrm{depth}=11520*7=80640,
+T_\mathrm{depth,us}=11520*7*1\ \mu\mathrm{s}=80640\ \mu\mathrm{s},
 \qquad
 nT=7840*80640=632217600.
 ```
@@ -324,11 +331,11 @@ Shared surface-code compilation quantities:
 The execution time for a surface-code point is
 
 ```math
-T_\mathrm{surface}=T_\mathrm{depth} d t_\mathrm{cycle}
-                 =6400d,
+T_\mathrm{surface,us}=T_\mathrm{depth} d t_\mathrm{cycle,us}
+                    =6400d*1\ \mu\mathrm{s},
 ```
 
-because `t_cycle = 1`.
+because the current default `t_cycle = 1` is interpreted as `1 us`.
 
 The logical lifetime model is
 
@@ -338,10 +345,9 @@ T_{2,\mathrm{logical}}(d,\Lambda)
  \Lambda^{(d-3)/2}.
 ```
 
-In the current config, `T_3 = 100` and `Lambda_ref = 2`. The field is named
-`T2_distance_3_us`, but the surface-code branch uses it in the same units as
-`t_cycle`; with `t_cycle = 1`, this is effectively a code-cycle normalization
-inside the plot.
+In the current config, `T_3 = 100 us` and `Lambda_ref = 2`. This is
+dimensionally consistent with `T_surface_us` only when `t_cycle` is interpreted
+as microseconds per QEC cycle.
 
 Surface-code memory and factory area:
 
@@ -449,7 +455,7 @@ phenomenological choice not backed by a paper in the current repo.
 | EPS space overhead | 2 | Internal | Phenomenological overhead choice. |
 | EPS `T2` sweep | 100, 200, 1000 us | Internal sweep | Labels show `T1=T2/2`; values are illustrative. |
 | EPS dephasing suppression | Reaches `T2=2T1` | Internal | The relaxation limit follows from the coherence relation; the EPS mechanism is not backed by a paper in the repo. |
-| Surface `T2_distance_3` | 100 | Internal normalization | The field name says `_us`, but code uses it in the surface-code cycle unit. |
+| Surface `T2_distance_3` | 100 us | Internal normalization | Baseline logical lifetime for `d=3`, expressed in the same microsecond unit as `T_surface_us`. |
 | Surface `reference_Lambda` | 2 | Partly backed | Google Quantum AI Nature 2025 measures `Lambda=2.14 +/- 0.02`; using exactly 2 is an internal rounded reference. |
 | Active surface `Lambda` values | 4, 6 | Internal/extrapolated | Google backs the definition and measured `Lambda~2.14`, not optimistic `4` or `6`. |
 | Surface memory count | `2d^2-1` | Backed | Google Quantum AI Nature 2025, Eq. (1) surrounding text, defines distance `d` as using `2d^2-1` physical qubits per logical qubit. |
@@ -463,7 +469,7 @@ phenomenological choice not backed by a paper in the current repo.
 | Surface factory patch equivalents | 8 | Internal optimistic | Litinski backs factory/block resource framing, but not this exact equivalent-area constant. |
 | Surface candidate distances | Odd `3..81` | Internal enumeration | Odd distances are standard for distance-labeled surface-code memories; range and filter are plotting choices. |
 | Surface `min_H`, `max_H` filters | `1e-3`, `-log(1-0.9999999)` | Internal plotting filters | Selects visible/meaningful trace extent. |
-| Surface `t_cycle` | 1 | Internal unit normalization | Litinski uses 1 us examples and Google reports 1.1 us cycles; current code uses a dimensionless cycle unit. |
+| Surface/STAR `t_cycle` | 1 us | Internal unit normalization | Litinski uses 1 us examples and Google reports 1.1 us cycles; current code interprets this field as microseconds per QEC cycle. |
 | Lattice surgery requires `d` rounds | Formula | Backed | Horsman et al., Secs. 3-4, state full fault tolerance requires `d` rounds for distance `d`. |
 | Tile resource framing | `space=s*d^2`, `time=t*d`, `space-time=s*t*d^3` | Backed | Litinski, Sec. 2 and Appendix A. |
 | STAR rotation latency | 18 clocks | Backed | Akahoshi et al., Table II and Sec. VII comparison. |
@@ -475,7 +481,7 @@ phenomenological choice not backed by a paper in the current repo.
 | STAR compact patch count | `1.5n+5` patches | Backed | Akahoshi et al., Sec. V compact-block construction. |
 | STAR physical qubits per patch | `2d^2` | Backed/approximate | Akahoshi et al., Sec. VI C uses approximately `2d^2` physical qubits per logical patch. |
 | STAR total rotation count | `steps*edges*2` | Internal benchmark mapping | Comes from this plot's 5-by-10 edge Hamiltonian and two rotations per edge. |
-| STAR rotation depth schedule | `steps*4*2*18` | Mixed | 18-clock STAR latency backed; edge-color schedule and two rotations per edge are internal. |
+| STAR rotation depth schedule | `steps*4*2*18` clocks, then `*d*t_cycle_us` | Mixed | 18-clock STAR latency backed; one STAR clock is `d` syndrome rounds, while edge-color schedule and two rotations per edge are internal. |
 
 ## Literature Ledger
 
@@ -495,7 +501,7 @@ Verification performed against the current package:
 - Import path: `from analog_qec.phenomenological_resource_estimate import build_comparison_points`.
 - Config helper: `default_phenomenological_resource_estimate_config()`.
 - Point counts: Raw 3, EPS 3, STAR 12, Surface code 16.
-- Shared values: `T_analog=0.5 us`, `n_edges=85`, `n_trotter_steps=80`,
+- Shared values: `T_analog=0.5 us`, `t_cycle=1 us`, `n_edges=85`, `n_trotter_steps=80`,
   `surface_T_depth=6400`, `surface_T_count=136000`,
   `surface_parallel_T_demand=22`.
 - Manual rows checked in this document:
