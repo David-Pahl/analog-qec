@@ -3,6 +3,7 @@
 from analog_qec.phenomenological_resource_estimate.config import (
     BenchmarkConfig,
     EPSConfig,
+    ObservableTaskConfig,
     PhenomenologicalResourceEstimateConfig,
     PlotConfig,
     RawConfig,
@@ -15,6 +16,7 @@ from analog_qec.phenomenological_resource_estimate.config import (
 from analog_qec.phenomenological_resource_estimate.plotting import (
     apply_plot_style,
     plot_phenomenological_resource_estimate,
+    plot_stacked_phenomenological_resource_estimate,
 )
 from analog_qec.phenomenological_resource_estimate.schemes import (
     ComparisonPoint,
@@ -25,6 +27,7 @@ __all__ = [
     "BenchmarkConfig",
     "ComparisonPoint",
     "EPSConfig",
+    "ObservableTaskConfig",
     "PhenomenologicalResourceEstimateConfig",
     "PlotConfig",
     "RawConfig",
@@ -36,4 +39,5 @@ __all__ = [
     "default_phenomenological_resource_estimate_config",
     "default_plot_config",
     "plot_phenomenological_resource_estimate",
+    "plot_stacked_phenomenological_resource_estimate",
 ]

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
 from analog_qec.phenomenological_resource_estimate.config import (
+    ObservableTaskConfig,
     PhenomenologicalResourceEstimateConfig,
     default_phenomenological_resource_estimate_config,
 )
@@ -18,6 +19,7 @@ from analog_qec.phenomenological_resource_estimate.metrics import (
     star_clifford_error_per_clock,
     star_compact_physical_qubits,
     star_rotation_count,
+    success_retry_multiplier,
     surface_code_T,
     surface_code_Tlogical,
     surface_code_n_memory,
@@ -36,6 +38,11 @@ class ComparisonPoint:
     P_fail: float
     nT: float
     metadata: Dict[str, Any] = field(default_factory=dict)
+    n: Optional[float] = None
+    T: Optional[float] = None
+    nT_per_shot: Optional[float] = None
+    T_per_shot: Optional[float] = None
+    task_repetitions: float = 1
 
     def as_dict(self) -> Dict[str, Any]:
         point = {
@@ -45,6 +52,11 @@ class ComparisonPoint:
             "H": self.H,
             "P_fail": self.P_fail,
             "nT": self.nT,
+            "n": self.n,
+            "T": self.T,
+            "nT_per_shot": self.nT_per_shot,
+            "T_per_shot": self.T_per_shot,
+            "task_repetitions": self.task_repetitions,
         }
         point.update(self.metadata)
         return point
@@ -96,19 +108,56 @@ def _comparison_point(
     scheme: str,
     label: str,
     H: float,
-    nT: float,
+    n: float,
+    T: float,
+    task: ObservableTaskConfig,
     group: Optional[str] = None,
     **metadata: Any,
 ) -> ComparisonPoint:
+    task_repetitions = _task_repetitions(task, H)
+    T_task = T * task_repetitions
+    nT_per_shot = n * T
+    nT_task = n * T_task
+    metadata.update(
+        observable_task_enabled=task.enabled,
+        observable_task=task.observable_set,
+        measurement_bases=task.measurement_bases,
+        n_measurement_bases=len(task.measurement_bases),
+        target_standard_error=task.target_standard_error,
+        single_shot_variance_bound=task.single_shot_variance_bound,
+        effective_standard_error_bound=task.effective_standard_error_bound,
+        shots_per_basis=task.effective_shots_per_basis,
+        computed_shots_per_basis=task.computed_shots_per_basis,
+        total_measurement_shots=task.total_measurement_shots,
+        include_success_retry_overhead=task.include_success_retry_overhead,
+        success_retry_multiplier=(
+            success_retry_multiplier(H) if task.include_success_retry_overhead else 1
+        ),
+    )
     return ComparisonPoint(
         scheme=scheme,
         group=group or scheme,
         label=label,
         H=H,
         P_fail=failure_probability(H),
-        nT=nT,
+        nT=nT_task,
+        n=n,
+        T=T_task,
+        nT_per_shot=nT_per_shot,
+        T_per_shot=T,
+        task_repetitions=task_repetitions,
         metadata=metadata,
     )
+
+
+def _task_repetitions(task: ObservableTaskConfig, H: float) -> float:
+    if not task.enabled:
+        return 1
+
+    repetitions = float(task.total_measurement_shots)
+    if task.include_success_retry_overhead:
+        repetitions *= success_retry_multiplier(H)
+    return repetitions
 
 
 def _add_raw_points(
@@ -118,15 +167,13 @@ def _add_raw_points(
 ) -> None:
     raw = config.raw
     benchmark = config.benchmark
-    nT_raw = overhead(raw.space_overhead_factor, benchmark.n_logical) * overhead(
-        raw.time_overhead_factor,
-        comparison_T,
-    )
+    n_raw = overhead(raw.space_overhead_factor, benchmark.n_logical)
+    T_raw = overhead(raw.time_overhead_factor, comparison_T)
 
     for T_phi_raw in raw.T_phi_values_us:
         H_raw = register_error_exponent(
             benchmark.n_logical,
-            overhead(raw.time_overhead_factor, comparison_T),
+            T_raw,
             T_phi_raw,
         )
         points.append(
@@ -134,7 +181,9 @@ def _add_raw_points(
                 "Raw",
                 rf"Raw $T_\phi={T_phi_raw:g}\,\mu\mathrm{{s}}$",
                 H_raw,
-                nT_raw,
+                n_raw,
+                T_raw,
+                config.observable_task,
             )
         )
 
@@ -146,16 +195,19 @@ def _add_eps_points(
 ) -> None:
     eps = config.eps
     benchmark = config.benchmark
+    n_eps = overhead(eps.space_overhead_factor, benchmark.n_logical)
+    T_eps = comparison_T
 
     for T2_eps in eps.T2_values_us:
         H_eps = register_error_exponent(benchmark.n_logical, comparison_T, T2_eps)
-        nT_eps = overhead(eps.space_overhead_factor, benchmark.n_logical) * comparison_T
         points.append(
             _comparison_point(
                 "EPS",
                 f"EPS T1={T2_eps / 2:g}us",
                 H_eps,
-                nT_eps,
+                n_eps,
+                T_eps,
+                config.observable_task,
             )
         )
 
@@ -216,14 +268,15 @@ def _add_star_point(
     T_arch_star = star_rotation_depth_clocks * distance * surface.t_cycle
     T2_limit_star = benchmark.n_logical * T_arch_star / H_star
     n_phys = star_compact_physical_qubits(benchmark.n_logical, distance)
-    nT_star = n_phys * T_arch_star
 
     points.append(
         _comparison_point(
             "STAR",
             f"d={distance}",
             H_star,
-            nT_star,
+            n_phys,
+            T_arch_star,
+            config.observable_task,
             group=f"STAR p={p_phys:g}",
             d=distance,
             p_phys=p_phys,
@@ -297,7 +350,6 @@ def _add_surface_code_points(
                 T_surface,
                 T2_surface,
             )
-            nT_surface = n_surface * T_surface
 
             if H_surface <= surface.max_H:
                 points.append(
@@ -305,7 +357,9 @@ def _add_surface_code_points(
                         "Surface code",
                         f"d={distance}",
                         H_surface,
-                        nT_surface,
+                        n_surface,
+                        T_surface,
+                        config.observable_task,
                         group=f"Surface code Lambda={Lambda_surface}",
                         Lambda=Lambda_surface,
                         d=distance,

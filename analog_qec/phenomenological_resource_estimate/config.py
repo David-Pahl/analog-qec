@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 
 @dataclass(frozen=True)
@@ -83,6 +83,52 @@ class STARConfig:
 
 
 @dataclass(frozen=True)
+class ObservableTaskConfig:
+    """Sampling task layered on top of one simulated time-evolution circuit."""
+
+    enabled: bool = True
+    observable_set: str = "final XY energy density and radial transverse correlations"
+    measurement_bases: Tuple[str, ...] = ("global X", "global Y")
+    target_standard_error: float = 1e-2
+    single_shot_variance_bound: float = 1
+    shots_per_basis: Optional[int] = None
+    include_success_retry_overhead: bool = False
+
+    def __post_init__(self) -> None:
+        if len(self.measurement_bases) == 0:
+            raise ValueError("measurement_bases must contain at least one basis")
+        if self.target_standard_error <= 0:
+            raise ValueError("target_standard_error must be positive")
+        if self.single_shot_variance_bound < 0:
+            raise ValueError("single_shot_variance_bound must be non-negative")
+        if self.shots_per_basis is not None and self.shots_per_basis < 1:
+            raise ValueError("shots_per_basis must be positive when provided")
+
+    @property
+    def computed_shots_per_basis(self) -> int:
+        if self.single_shot_variance_bound == 0:
+            return 1
+        shots = self.single_shot_variance_bound / self.target_standard_error**2
+        return max(1, int(math.ceil(shots - 1e-12)))
+
+    @property
+    def effective_shots_per_basis(self) -> int:
+        return self.shots_per_basis or self.computed_shots_per_basis
+
+    @property
+    def total_measurement_shots(self) -> int:
+        if not self.enabled:
+            return 1
+        return len(self.measurement_bases) * self.effective_shots_per_basis
+
+    @property
+    def effective_standard_error_bound(self) -> float:
+        return math.sqrt(
+            self.single_shot_variance_bound / self.effective_shots_per_basis
+        )
+
+
+@dataclass(frozen=True)
 class PhenomenologicalResourceEstimateConfig:
     """Complete configuration for building the resource-estimate point set."""
 
@@ -91,6 +137,7 @@ class PhenomenologicalResourceEstimateConfig:
     eps: EPSConfig = field(default_factory=EPSConfig)
     surface: SurfaceCodeConfig = field(default_factory=SurfaceCodeConfig)
     star: STARConfig = field(default_factory=STARConfig)
+    observable_task: ObservableTaskConfig = field(default_factory=ObservableTaskConfig)
 
 
 @dataclass(frozen=True)
@@ -167,8 +214,22 @@ class PlotConfig:
     star_p_label_offsets: Dict[float, Tuple[int, int]] = field(
         default_factory=lambda: {5e-5: (0, -50), 1e-4: (40, -50), 5e-4: (45, -50)}
     )
+    star_p_label_offsets_by_metric: Dict[str, Dict[float, Tuple[int, int]]] = field(
+        default_factory=lambda: {
+            "space": {5e-5: (0, -50), 1e-4: (40, -50), 5e-4: (45, -50)},
+            "time": {5e-5: (0, -33), 1e-4: (40, -33), 5e-4: (45, -33)},
+        }
+    )
     surface_distance_label_offsets: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: {2: (4, 2), 4: (3, 3), 6: (0, -5)}
+    )
+    surface_distance_label_offsets_by_metric: Dict[
+        str, Dict[int, Tuple[int, int]]
+    ] = field(
+        default_factory=lambda: {
+            "space": {2: (4, 2), 4: (3, 3), 6: (0, -5)},
+            "time": {2: (4, 2), 4: (4, 8), 6: (0, -10)},
+        }
     )
     label_bbox: Dict[str, object] = field(
         default_factory=lambda: {
@@ -179,7 +240,13 @@ class PlotConfig:
         }
     )
     lambda_label_offsets: Dict[int, Tuple[int, int]] = field(
-        default_factory=lambda: {2: (30, 0), 4: (30, 1), 6: (-4, -8)}
+        default_factory=lambda: {2: (30, 0), 4: (30, 1), 6: (30, 5)}
+    )
+    lambda_label_offsets_by_metric: Dict[str, Dict[int, Tuple[int, int]]] = field(
+        default_factory=lambda: {
+            "space": {2: (30, 0), 4: (30, 1), 6: (30, 5)},
+            "time": {2: (30, 0), 4: (30, 7), 6: (30, 3)},
+        }
     )
     top_axis_failure_ticks: Tuple[float, ...] = (1e-3, 1e-2, 1e-1, 0.5, 0.9, 0.99)
 

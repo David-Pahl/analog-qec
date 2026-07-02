@@ -15,7 +15,9 @@ The current source of truth is the package
   change the resource values.
 
 The current generator returns 34 plotted points: 3 Raw, 3 EPS, 12 STAR, and
-16 Surface-code points.
+16 Surface-code points. By default, each point includes the measurement shots
+needed for a modest observable-estimation task: final XY energy density plus
+radial transverse correlations, measured in global X and global Y bases.
 
 ## Overview
 
@@ -31,8 +33,11 @@ with register failure probability
 P_\mathrm{fail}=1-\exp(-H).
 ```
 
-This model is used directly for Raw, EPS, and Surface-code points. For STAR,
-the STAR paper's rotation and logical-Clifford error model first gives
+Here `T2_limit` means the limiting lifetime used in the register-exponent
+model. For Raw/EPS this is a physical coherence-time convention. For the
+encoded schemes it is an effective logical limiting lifetime. This model is
+used directly for Raw, EPS, and Surface-code points. For STAR, the STAR
+paper's rotation and logical-Clifford error model first gives
 
 ```math
 H_\mathrm{STAR}=H_\mathrm{rot}+H_\mathrm{Cliff}.
@@ -40,15 +45,50 @@ H_\mathrm{STAR}=H_\mathrm{rot}+H_\mathrm{Cliff}.
 
 The STAR section below then converts this into an equivalent
 `T2_limit = n_logical*T_arch/H_STAR`, so STAR also has the same limiting-lifetime
-interpretation on the x-axis.
+interpretation on the x-axis. The distinction is that Surface code takes its
+effective logical lifetime as an input scaling model, while STAR computes the
+operation-failure exponent first and then back-solves the equivalent lifetime
+that would give the same exponent.
 
-The y-axis is the space-time overhead `nT` in physical-qubit-microseconds.
+The default y-axis is the task-level space-time cost `nT` in
+physical-qubit-microseconds. The single-shot circuit values are still stored as
+`T_per_shot` and `nT_per_shot` on each `ComparisonPoint`; the plotted `T` and
+`nT` multiply those values by the configured observable-estimation shot count.
 Raw and EPS use the analog evolution time directly. Surface-code and STAR
 depths are first counted in QEC cycles or STAR clocks and then converted to
 microseconds with the QEC cycle time. In the current default configuration
 `t_cycle = 1`, interpreted as `1 us`, so the cycle-depth numbers are
 numerically equal to microseconds. If `t_cycle` is changed, Surface-code and
-STAR space-time overheads should scale by that factor.
+STAR single-shot and task-level space-time costs scale by that factor.
+
+The default observable task uses the bounded-estimator rule
+
+```math
+N_\mathrm{shots/basis}
+=\left\lceil \mathrm{Var}/\epsilon^2 \right\rceil
+=\left\lceil 1/(10^{-2})^2 \right\rceil
+=10000.
+```
+
+With two measurement bases this gives
+
+```math
+N_\mathrm{task}=2*10000=20000
+```
+
+nominal circuit executions. Thus
+
+```math
+T_\mathrm{task}=N_\mathrm{task}T_\mathrm{per\ shot},
+\qquad
+nT_\mathrm{task}=N_\mathrm{task}nT_\mathrm{per\ shot}.
+```
+
+The optional config flag `include_success_retry_overhead` additionally
+multiplies the task repetitions by `exp(H)`, corresponding to retrying
+heralded failed attempts. It is disabled by default because Raw/EPS failures
+are not assumed to be heralded and because the x-axis is still a per-circuit
+register-failure exponent, not a full sampling-bias analysis.
 
 ## Source of Truth
 
@@ -57,6 +97,9 @@ STAR space-time overheads should scale by that factor.
 | Register exponent | `metrics.register_error_exponent` | `H = n_logical * T_arch / T2_limit` |
 | Failure probability | `metrics.failure_probability` | `P_fail = 1 - exp(-H)` |
 | Multiplicative overhead | `metrics.overhead` | `multiplier * value` |
+| Heralded retry multiplier | `metrics.success_retry_multiplier` | `exp(H)` |
+| Observable shots per basis | `ObservableTaskConfig.computed_shots_per_basis` | `ceil(Var/epsilon**2)` |
+| Task shot count | `ObservableTaskConfig.total_measurement_shots` | `n_bases * shots_per_basis` |
 | Rotated surface-code memory area | `metrics.surface_code_n_memory` | `2*d**2 - 1` |
 | Surface-code execution time | `metrics.surface_code_T` | `T_gate_depth * d * t_cycle_us` |
 | Surface-code logical lifetime | `metrics.surface_code_Tlogical` | `T2_d3_ref * (Lambda/reference_Lambda)^2 * Lambda^((d-3)/2)` |
@@ -89,6 +132,45 @@ T_\mathrm{analog}=Jt\,t_{2\pi}/(2\pi)
                 =0.5\ \mu\mathrm{s}.
 ```
 
+## Observable-Estimation Task
+
+Current implementation: `ObservableTaskConfig`, applied in `_comparison_point()`.
+
+The default task is intended to turn the per-circuit runtime into the time to
+estimate a simple XY-model observable set. It uses:
+
+| Parameter | Value | Meaning |
+| --- | ---: | --- |
+| Observable set | final XY energy density and radial transverse correlations | Measured after the `Jt=20*2*pi` evolution. |
+| Measurement bases | global X, global Y | Global X gives all `X_i X_j` samples; global Y gives all `Y_i Y_j` samples. |
+| Single-shot variance bound | `Var <= 1` | Conservative bounded Pauli-estimator variance. |
+| Target standard error | `epsilon = 1e-2` | Illustrative percent-level additive precision. |
+| Shots per basis | `ceil(1/(1e-2)^2) = 10000` | Computed from `ceil(Var/epsilon^2)`. |
+| Total task shots | `2*10000 = 20000` | Multiplies time and space-time costs. |
+| Heralded retry overhead | disabled | Set `include_success_retry_overhead=True` to multiply by `exp(H)`. |
+
+The corresponding XY observables are
+
+```math
+E_{XY}=\frac{1}{2|E|}\sum_{\langle i,j\rangle}
+\left\langle X_iX_j+Y_iY_j\right\rangle,
+```
+
+and radial transverse correlators of the same form averaged over site pairs at
+fixed separation. Each shot in the global X basis produces bit values
+`x_i = +/-1`, so one sample of an edge correlator is `x_i x_j`; similarly for
+the global Y basis. For a single Pauli product, `Var = 1 - <P>^2 <= 1`. For
+energy density or radial averages, the actual variance is the variance of the
+full averaged per-shot estimator, including covariance between terms; the
+bounded default deliberately avoids assuming favorable covariance cancellation.
+
+This observable choice is motivated by the 69-qubit analog-digital XY-magnet
+experiment, which emphasizes energy density, transverse correlations,
+energy-density fluctuations, entanglement entropy, vortex correlators,
+vorticity, spin current, and energy transport. The default here does not model
+the heavier randomized-measurement tasks needed for entanglement entropy or the
+additional bases needed for vortex/transport diagnostics.
+
 ## Raw Analog Points
 
 Current implementation: `_add_raw_points()`.
@@ -111,9 +193,20 @@ Eqs. (1a) and (1b) of that paper.
 Raw overhead:
 
 ```math
-nT_\mathrm{Raw}
+T_{\mathrm{Raw,per\ shot}}
+=0.5\ \mu\mathrm{s},
+\qquad
+nT_{\mathrm{Raw,per\ shot}}
 =(1*n_\mathrm{logical})(1*T_\mathrm{analog})
 =50*0.5=25.
+```
+
+The task-level plotted values multiply by `N_task=20000`:
+
+```math
+T_{\mathrm{Raw,task}}=20000*0.5\ \mu\mathrm{s}=0.01\ \mathrm{s},
+\qquad
+nT_{\mathrm{Raw,task}}=20000*25=500000.
 ```
 
 Raw exponent:
@@ -122,11 +215,11 @@ Raw exponent:
 H_\mathrm{Raw}=50*0.5/T_\phi = 25/T_\phi.
 ```
 
-| Label | `T_phi` used as `T2_limit` (us) | `H` | `P_fail` | `nT` |
-| --- | ---: | ---: | ---: | ---: |
-| `Raw T_phi=5 us` | 5 | 5.000000 | 0.993262 | 25 |
-| `Raw T_phi=10 us` | 10 | 2.500000 | 0.917915 | 25 |
-| `Raw T_phi=50 us` | 50 | 0.500000 | 0.393469 | 25 |
+| Label | `T_phi` used as `T2_limit` (us) | `H` | `P_fail` | `nT_per_shot` | task `nT` | task time (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `Raw T_phi=5 us` | 5 | 5.000000 | 0.993262 | 25 | 500,000 | 0.01 |
+| `Raw T_phi=10 us` | 10 | 2.500000 | 0.917915 | 25 | 500,000 | 0.01 |
+| `Raw T_phi=50 us` | 50 | 0.500000 | 0.393469 | 25 | 500,000 | 0.01 |
 
 Calculation check for `T_phi=10 us`:
 
@@ -158,9 +251,20 @@ no EPS-specific paper source is present in the current repository.
 EPS overhead:
 
 ```math
-nT_\mathrm{EPS}
+T_{\mathrm{EPS,per\ shot}}
+=0.5\ \mu\mathrm{s},
+\qquad
+nT_{\mathrm{EPS,per\ shot}}
 =(2*n_\mathrm{logical})T_\mathrm{analog}
 =(2*50)*0.5=50.
+```
+
+The task-level plotted values multiply by `N_task=20000`:
+
+```math
+T_{\mathrm{EPS,task}}=20000*0.5\ \mu\mathrm{s}=0.01\ \mathrm{s},
+\qquad
+nT_{\mathrm{EPS,task}}=20000*50=1000000.
 ```
 
 EPS exponent:
@@ -169,11 +273,11 @@ EPS exponent:
 H_\mathrm{EPS}=50*0.5/T_2=25/T_2.
 ```
 
-| Label | Stored `T2_limit` (us) | Implied `T1` (us) | `H` | `P_fail` | `nT` |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `EPS T1=50us` | 100 | 50 | 0.250000 | 0.221199 | 50 |
-| `EPS T1=100us` | 200 | 100 | 0.125000 | 0.117503 | 50 |
-| `EPS T1=500us` | 1000 | 500 | 0.025000 | 0.024690 | 50 |
+| Label | Stored `T2_limit` (us) | Implied `T1` (us) | `H` | `P_fail` | `nT_per_shot` | task `nT` | task time (s) |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `EPS T1=50us` | 100 | 50 | 0.250000 | 0.221199 | 50 | 1,000,000 | 0.01 |
+| `EPS T1=100us` | 200 | 100 | 0.125000 | 0.117503 | 50 | 1,000,000 | 0.01 |
+| `EPS T1=500us` | 1000 | 500 | 0.025000 | 0.024690 | 50 | 1,000,000 | 0.01 |
 
 Calculation check for `T2=200 us`:
 
@@ -194,7 +298,7 @@ H_\mathrm{STAR}=H_\mathrm{rot}+H_\mathrm{Cliff}.
 ```
 
 To put STAR on the same x-axis convention as Raw, EPS, and Surface code, the
-current implementation then reports an equivalent limiting lifetime
+current implementation then reports an effective logical limiting lifetime
 
 ```math
 T_{2,\mathrm{limit}}^\mathrm{STAR}
@@ -208,6 +312,12 @@ register-exponent definition:
 H_\mathrm{STAR}
 =n_\mathrm{logical}T_\mathrm{arch,STAR}/T_{2,\mathrm{limit}}^\mathrm{STAR}.
 ```
+
+This is conceptually the same register-level role played by
+`T_{2,\mathrm{logical}}` in the Surface-code section. The difference is the
+direction of the calculation: the surface-code model starts from an assumed
+logical-lifetime scaling and computes `H`, whereas STAR starts from the
+operation-error budget and reports the lifetime that reproduces that `H`.
 
 Shared STAR/Trotter quantities:
 
@@ -296,7 +406,15 @@ n_\mathrm{phys}=(1.5n_\mathrm{logical}+5)2d^2,
 \qquad
 T_{\mathrm{arch,STAR},\mu\mathrm{s}}=11520d\,t_{\mathrm{cycle},\mu\mathrm{s}},
 \qquad
-nT=n_\mathrm{phys}T_{\mathrm{arch,STAR},\mu\mathrm{s}}.
+nT_\mathrm{per\ shot}=n_\mathrm{phys}T_{\mathrm{arch,STAR},\mu\mathrm{s}}.
+```
+
+The task-level plotted values multiply by `N_task=20000`:
+
+```math
+T_\mathrm{task}=20000T_{\mathrm{arch,STAR}},
+\qquad
+nT_\mathrm{task}=20000nT_\mathrm{per\ shot}.
 ```
 
 With the current default `t_cycle = 1 us`, this gives the same numerical values
@@ -311,20 +429,20 @@ the compact block requires `1.5n+5` logical patches to allocate `n` data logical
 qubits, and by Sec. VI C, which uses approximately `2d^2` physical qubits per
 logical patch.
 
-| `p` | `d` | `H_rot` | `H_Cliff` | `H` | `T_arch_us` | `T2_limit_us` | `P_fail` | `n_phys` | `nT` |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 5e-5 | 3 | 0.181333 | 0.268227 | 0.449561 | 34,560 | 3,843,753 | 0.362092 | 1,440 | 49,766,400 |
-| 5e-5 | 5 | 0.181333 | 0.003352 | 0.184685 | 57,600 | 15,594,128 | 0.168634 | 4,000 | 230,400,000 |
-| 5e-5 | 7 | 0.181333 | 0.000042 | 0.181375 | 80,640 | 22,230,152 | 0.165878 | 7,840 | 632,217,600 |
-| 5e-5 | 9 | 0.181333 | 0.000001 | 0.181334 | 103,680 | 28,588,152 | 0.165843 | 12,960 | 1,343,692,800 |
-| 1e-4 | 3 | 0.362667 | 1.072909 | 1.435576 | 34,560 | 1,203,698 | 0.762022 | 1,440 | 49,766,400 |
-| 1e-4 | 5 | 0.362667 | 0.026813 | 0.389479 | 57,600 | 7,394,490 | 0.322590 | 4,000 | 230,400,000 |
-| 1e-4 | 7 | 0.362667 | 0.000671 | 0.363338 | 80,640 | 11,097,113 | 0.304648 | 7,840 | 632,217,600 |
-| 1e-4 | 9 | 0.362667 | 0.000017 | 0.362683 | 103,680 | 14,293,455 | 0.304193 | 12,960 | 1,343,692,800 |
-| 5e-4 | 3 | 1.813333 | 26.822724 | 28.636057 | 34,560 | 60,344 | 1.000000 | 1,440 | 49,766,400 |
-| 5e-4 | 5 | 1.813333 | 3.351564 | 5.164897 | 57,600 | 557,610 | 0.994286 | 4,000 | 230,400,000 |
-| 5e-4 | 7 | 1.813333 | 0.419414 | 2.232747 | 80,640 | 1,805,847 | 0.892767 | 7,840 | 632,217,600 |
-| 5e-4 | 9 | 1.813333 | 0.052564 | 1.865897 | 103,680 | 2,778,288 | 0.845243 | 12,960 | 1,343,692,800 |
+| `p` | `d` | `H_rot` | `H_Cliff` | `H` | `T_arch_us` | task time (s) | `T2_limit_us` | `P_fail` | `n_phys` | `nT_per_shot` | task `nT` |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 5e-5 | 3 | 0.181333 | 0.268227 | 0.449561 | 34,560 | 691.2 | 3,843,753 | 0.362092 | 1,440 | 49,766,400 | 995,328,000,000 |
+| 5e-5 | 5 | 0.181333 | 0.003352 | 0.184685 | 57,600 | 1152 | 15,594,128 | 0.168634 | 4,000 | 230,400,000 | 4,608,000,000,000 |
+| 5e-5 | 7 | 0.181333 | 0.000042 | 0.181375 | 80,640 | 1612.8 | 22,230,152 | 0.165878 | 7,840 | 632,217,600 | 12,644,352,000,000 |
+| 5e-5 | 9 | 0.181333 | 0.000001 | 0.181334 | 103,680 | 2073.6 | 28,588,152 | 0.165843 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
+| 1e-4 | 3 | 0.362667 | 1.072909 | 1.435576 | 34,560 | 691.2 | 1,203,698 | 0.762022 | 1,440 | 49,766,400 | 995,328,000,000 |
+| 1e-4 | 5 | 0.362667 | 0.026813 | 0.389479 | 57,600 | 1152 | 7,394,490 | 0.322590 | 4,000 | 230,400,000 | 4,608,000,000,000 |
+| 1e-4 | 7 | 0.362667 | 0.000671 | 0.363338 | 80,640 | 1612.8 | 11,097,113 | 0.304648 | 7,840 | 632,217,600 | 12,644,352,000,000 |
+| 1e-4 | 9 | 0.362667 | 0.000017 | 0.362683 | 103,680 | 2073.6 | 14,293,455 | 0.304193 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
+| 5e-4 | 3 | 1.813333 | 26.822724 | 28.636057 | 34,560 | 691.2 | 60,344 | 1.000000 | 1,440 | 49,766,400 | 995,328,000,000 |
+| 5e-4 | 5 | 1.813333 | 3.351564 | 5.164897 | 57,600 | 1152 | 557,610 | 0.994286 | 4,000 | 230,400,000 | 4,608,000,000,000 |
+| 5e-4 | 7 | 1.813333 | 0.419414 | 2.232747 | 80,640 | 1612.8 | 1,805,847 | 0.892767 | 7,840 | 632,217,600 | 12,644,352,000,000 |
+| 5e-4 | 9 | 1.813333 | 0.052564 | 1.865897 | 103,680 | 2073.6 | 2,778,288 | 0.845243 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
 
 Calculation check for `p=1e-4, d=7`:
 
@@ -352,7 +470,13 @@ n_\mathrm{phys}=(1.5*50+5)*2*7^2=7840,
 \qquad
 T_{\mathrm{arch,STAR},\mu\mathrm{s}}=11520*7*1\ \mu\mathrm{s}=80640\ \mu\mathrm{s},
 \qquad
-nT=7840*80640=632217600.
+nT_\mathrm{per\ shot}=7840*80640=632217600.
+```
+
+```math
+T_\mathrm{task}=20000*80640\ \mu\mathrm{s}=1612.8\ \mathrm{s},
+\qquad
+nT_\mathrm{task}=20000*632217600=12644352000000.
 ```
 
 The equivalent limiting lifetime for the same point is
@@ -423,7 +547,15 @@ n_\mathrm{factory}=22*8*(2d^2-1),
 ```math
 n_\mathrm{surface}=n_\mathrm{memory}+n_\mathrm{factory},
 \qquad
-nT=n_\mathrm{surface}T_\mathrm{surface}.
+nT_\mathrm{per\ shot}=n_\mathrm{surface}T_\mathrm{surface}.
+```
+
+The task-level plotted values multiply by `N_task=20000`:
+
+```math
+T_\mathrm{task}=20000T_\mathrm{surface},
+\qquad
+nT_\mathrm{task}=20000nT_\mathrm{per\ shot}.
 ```
 
 The `2d^2-1` rotated surface-code physical-qubit count and the Lambda
@@ -443,24 +575,24 @@ time steps to `d` code cycles, giving leading-order space-time cost
 `s*t*d^3`. The exact project choices `T_depth_per_arbitrary_rotation=10` and
 `T_factory_patch_equivalents=8` remain internal optimistic constants.
 
-| `Lambda` | `d` | `T2_logical` | `H` | `P_fail` | `n_memory` | `n_factory` | `nT` |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4 | 13 | 409,600 | 10.156250 | 0.999961 | 16,850 | 59,312 | 6,336,678,400 |
-| 4 | 15 | 1,638,400 | 2.929688 | 0.946586 | 22,450 | 79,024 | 9,741,504,000 |
-| 4 | 17 | 6,553,600 | 0.830078 | 0.563985 | 28,850 | 101,552 | 14,187,737,600 |
-| 4 | 19 | 26,214,400 | 0.231934 | 0.207001 | 36,050 | 126,896 | 19,814,233,600 |
-| 4 | 21 | 104,857,600 | 0.064087 | 0.062077 | 44,050 | 155,056 | 26,759,846,400 |
-| 4 | 23 | 419,430,400 | 0.017548 | 0.017395 | 52,850 | 186,032 | 35,163,430,400 |
-| 4 | 25 | 1,677,721,600 | 0.004768 | 0.004757 | 62,450 | 219,824 | 45,163,840,000 |
-| 4 | 27 | 6,710,886,400 | 0.001287 | 0.001287 | 72,850 | 256,432 | 56,899,929,600 |
-| 4 | 29 | 26,843,545,600 | 0.000346 | 0.000346 | 84,050 | 295,856 | 70,510,553,600 |
-| 6 | 9 | 194,400 | 14.814815 | 1.000000 | 8,050 | 28,336 | 2,095,833,600 |
-| 6 | 11 | 1,166,400 | 3.017833 | 0.951093 | 12,050 | 42,416 | 3,834,406,400 |
-| 6 | 13 | 6,998,400 | 0.594422 | 0.448118 | 16,850 | 59,312 | 6,336,678,400 |
-| 6 | 15 | 41,990,400 | 0.114312 | 0.108020 | 22,450 | 79,024 | 9,741,504,000 |
-| 6 | 17 | 251,942,400 | 0.021592 | 0.021361 | 28,850 | 101,552 | 14,187,737,600 |
-| 6 | 19 | 1,511,654,400 | 0.004022 | 0.004014 | 36,050 | 126,896 | 19,814,233,600 |
-| 6 | 21 | 9,069,926,400 | 0.000741 | 0.000741 | 44,050 | 155,056 | 26,759,846,400 |
+| `Lambda` | `d` | `T2_logical` | `H` | `P_fail` | `n_memory` | `n_factory` | `T_surface_us` | task time (s) | `nT_per_shot` | task `nT` |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 4 | 13 | 409,600 | 10.156250 | 0.999961 | 16,850 | 59,312 | 83,200 | 1664 | 6,336,678,400 | 126,733,568,000,000 |
+| 4 | 15 | 1,638,400 | 2.929688 | 0.946586 | 22,450 | 79,024 | 96,000 | 1920 | 9,741,504,000 | 194,830,080,000,000 |
+| 4 | 17 | 6,553,600 | 0.830078 | 0.563985 | 28,850 | 101,552 | 108,800 | 2176 | 14,187,737,600 | 283,754,752,000,000 |
+| 4 | 19 | 26,214,400 | 0.231934 | 0.207001 | 36,050 | 126,896 | 121,600 | 2432 | 19,814,233,600 | 396,284,672,000,000 |
+| 4 | 21 | 104,857,600 | 0.064087 | 0.062077 | 44,050 | 155,056 | 134,400 | 2688 | 26,759,846,400 | 535,196,928,000,000 |
+| 4 | 23 | 419,430,400 | 0.017548 | 0.017395 | 52,850 | 186,032 | 147,200 | 2944 | 35,163,430,400 | 703,268,608,000,000 |
+| 4 | 25 | 1,677,721,600 | 0.004768 | 0.004757 | 62,450 | 219,824 | 160,000 | 3200 | 45,163,840,000 | 903,276,800,000,000 |
+| 4 | 27 | 6,710,886,400 | 0.001287 | 0.001287 | 72,850 | 256,432 | 172,800 | 3456 | 56,899,929,600 | 1,137,998,592,000,000 |
+| 4 | 29 | 26,843,545,600 | 0.000346 | 0.000346 | 84,050 | 295,856 | 185,600 | 3712 | 70,510,553,600 | 1,410,211,072,000,000 |
+| 6 | 9 | 194,400 | 14.814815 | 1.000000 | 8,050 | 28,336 | 57,600 | 1152 | 2,095,833,600 | 41,916,672,000,000 |
+| 6 | 11 | 1,166,400 | 3.017833 | 0.951093 | 12,050 | 42,416 | 70,400 | 1408 | 3,834,406,400 | 76,688,128,000,000 |
+| 6 | 13 | 6,998,400 | 0.594422 | 0.448118 | 16,850 | 59,312 | 83,200 | 1664 | 6,336,678,400 | 126,733,568,000,000 |
+| 6 | 15 | 41,990,400 | 0.114312 | 0.108020 | 22,450 | 79,024 | 96,000 | 1920 | 9,741,504,000 | 194,830,080,000,000 |
+| 6 | 17 | 251,942,400 | 0.021592 | 0.021361 | 28,850 | 101,552 | 108,800 | 2176 | 14,187,737,600 | 283,754,752,000,000 |
+| 6 | 19 | 1,511,654,400 | 0.004022 | 0.004014 | 36,050 | 126,896 | 121,600 | 2432 | 19,814,233,600 | 396,284,672,000,000 |
+| 6 | 21 | 9,069,926,400 | 0.000741 | 0.000741 | 44,050 | 155,056 | 134,400 | 2688 | 26,759,846,400 | 535,196,928,000,000 |
 
 Calculation check for `Lambda=4, d=21`:
 
@@ -490,7 +622,13 @@ n_\mathrm{factory}=22*8*(2*21^2-1)=155056,
 ```
 
 ```math
-nT=(44050+155056)*134400=26759846400.
+nT_\mathrm{per\ shot}=(44050+155056)*134400=26759846400.
+```
+
+```math
+T_\mathrm{task}=20000*134400\ \mu\mathrm{s}=2688\ \mathrm{s},
+\qquad
+nT_\mathrm{task}=20000*26759846400=535196928000000.
 ```
 
 ## Assumption Ledger
@@ -508,6 +646,12 @@ phenomenological choice not backed by a paper in the current repo.
 | `Jt` | `20*2*pi` | Internal | Benchmark evolution angle. |
 | Full rotation time | 25 ns | Internal | Hardware-normalization choice. |
 | Lattice shape | `(5,10)` | Internal | Benchmark geometry; implies 50 sites and 85 nearest-neighbor edges. |
+| Observable task | final XY energy density and radial transverse correlations | Literature motivated | The 69-qubit analog-digital XY-magnet experiment reports energy density, correlations, energy fluctuations, entropy, vortex correlators, vorticity, spin current, and energy transport; this plot uses a lighter two-basis subset. |
+| Measurement bases | global X and global Y | Internal task model | These bases estimate `XX` and `YY` terms for the chosen XY energy/correlation observables. |
+| Shot-count rule | `shots_per_basis=ceil(Var/epsilon^2)` | Standard estimator scaling | Uses independent-shot standard error `sqrt(Var/N)` for the per-basis estimator. |
+| Single-shot variance bound | `Var <= 1` | Conservative internal bound | Exact variance depends on the observable and covariance between measured terms; bounded Pauli-product samples satisfy `Var <= 1`. |
+| Target standard error | `epsilon=1e-2` | Internal precision choice | Gives 10,000 shots per basis and 20,000 total task shots for the two-basis default. |
+| Success retry overhead | disabled | Internal modeling choice | Enable only for heralded/retriable failures; the plotted x-axis remains a per-circuit register-failure exponent. |
 | Raw space overhead | 1 | Internal | Bare analog baseline. |
 | Raw time overhead | 1 | Internal | Bare analog baseline. |
 | Raw `T_phi` sweep | 5, 10, 50 us | Internal sweep | Coherence decomposition is backed, but these values are illustrative. |
@@ -550,6 +694,7 @@ phenomenological choice not backed by a paper in the current repo.
 | Topic | Paper link | Exact reference used |
 | --- | --- | --- |
 | Superconducting-qubit coherence decomposition | [Gyenis et al., PRX Quantum 2, 030101 (2021)](https://doi.org/10.1103/PRXQuantum.2.030101); [arXiv:2106.10296](https://arxiv.org/abs/2106.10296) | Sec. II, page 2 text defining `T1`, `T_phi`, and `T2`; Eqs. (1a),(1b) define dephasing and relaxation rates. |
+| 69-qubit analog-digital XY-magnet observables | [Andersen et al., Nature 638, 79-85 (2025)](https://doi.org/10.1038/s41586-024-08460-3); [arXiv:2405.17385](https://arxiv.org/abs/2405.17385) | Abstract/main text motivate energy density, transverse correlations, energy fluctuations, entanglement entropy, vortex correlators, vorticity, spin current, and energy transport as relevant XY-model observables. |
 | STAR architecture and rotation model | [Akahoshi et al., PRX Quantum 5, 010337 (2024)](https://doi.org/10.1103/PRXQuantum.5.010337); [arXiv:2303.13181](https://arxiv.org/abs/2303.13181) | Sec. VI B, Eq. (14), Fig. 25 for `P_L,rotation=2p/15+O(p^2)`; Table I and Eq. (18) for Clifford fit; Sec. VI C for rotation budget; Sec. V for compact block patch count; Table II/Sec. VII for 18-clock rotation latency. |
 | Surface-code Lambda and `2d^2-1` memory count | [Google Quantum AI and Collaborators, Nature 638, 920-926 (2025)](https://doi.org/10.1038/s41586-024-08449-y); [arXiv:2408.13687](https://arxiv.org/abs/2408.13687); [PMC](https://pmc.ncbi.nlm.nih.gov/articles/PMC11864966/) | Eq. (1) and surrounding text for distance scaling and `2d^2-1` physical qubits; Fig. 1d for `Lambda=2.14 +/- 0.02`; Methods section for regression definition of `Lambda`. |
 | Surface-code introduction and resource scale | [Fowler et al., Phys. Rev. A 86, 032324 (2012)](https://doi.org/10.1103/PhysRevA.86.032324); [arXiv:1208.0928](https://arxiv.org/abs/1208.0928) | Introductory resource discussion and Sec. IX/appendices for surface-code cycles, logical operations, and distillation context. |
@@ -566,6 +711,8 @@ Verification performed against the current package:
 - Shared values: `T_analog=0.5 us`, `t_cycle=1 us`, `n_edges=85`, `n_trotter_steps=80`,
   `surface_T_depth=6400`, `surface_T_count=136000`,
   `surface_parallel_T_demand=22`.
+- Observable task values: `Var<=1`, `epsilon=1e-2`,
+  `shots_per_basis=10000`, `total_measurement_shots=20000`.
 - Manual rows checked in this document:
   - Raw `T_phi=10 us`.
   - EPS `T2=200 us`.

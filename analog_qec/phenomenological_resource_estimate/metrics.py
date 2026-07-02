@@ -20,6 +20,10 @@ def overhead(multiplier: float, value: float) -> float:
     return multiplier * value
 
 
+def success_retry_multiplier(H: float) -> float:
+    return math.exp(H)
+
+
 def surface_code_n_memory(distance: int) -> int:
     return 2 * distance**2 - 1
 

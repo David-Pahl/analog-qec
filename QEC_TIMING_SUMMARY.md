@@ -1,5 +1,18 @@
 # QEC Wall-Clock Time: From Literature to Your Model
 
+## Current Package Update
+
+The active phenomenological resource-estimate package now uses circuit depth for
+the encoded single-shot runtime and then multiplies by the observable-estimation
+shot count. For the default XY task,
+
+$$N_{\text{shots/basis}}=\left\lceil \mathrm{Var}/\epsilon^2 \right\rceil,$$
+
+with $\mathrm{Var}\le 1$, $\epsilon=10^{-2}$, and two global measurement bases
+(X and Y), giving 20,000 total circuit executions. Thus the plotted time-cost
+variant should be read as task time for that observable estimate, not only one
+surface-code circuit attempt.
+
 ## The Core Formula (From Literature)
 
 For surface-code error correction, the total wall-clock time for fault-tolerant quantum computation is:
