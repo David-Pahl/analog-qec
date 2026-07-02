@@ -168,7 +168,7 @@ def _add_star_points(
     benchmark = config.benchmark
     surface = config.surface
     star = config.star
-    star_rotation_depth = (
+    star_rotation_depth_clocks = (
         surface_n_trotter_steps
         * surface.edge_color_depth
         * surface.xy_pauli_rotations_per_edge
@@ -182,7 +182,7 @@ def _add_star_points(
                 config,
                 distance,
                 p_phys,
-                star_rotation_depth,
+                star_rotation_depth_clocks,
             )
 
 
@@ -191,7 +191,7 @@ def _add_star_point(
     config: PhenomenologicalResourceEstimateConfig,
     distance: int,
     p_phys: float,
-    star_rotation_depth: int,
+    star_rotation_depth_clocks: int,
 ) -> None:
     benchmark = config.benchmark
     surface = config.surface
@@ -205,7 +205,7 @@ def _add_star_point(
     P_rot_star = 2 * p_phys / 15
     N_rotation_budget_star = 1 / (2 * P_rot_star)
     H_rotation_star = N_rot_star / N_rotation_budget_star
-    N_clifford_clock_star = star_rotation_depth
+    N_clifford_clock_star = star_rotation_depth_clocks
     P_clifford_clock_star = star_clifford_error_per_clock(
         distance,
         p_phys,
@@ -213,10 +213,10 @@ def _add_star_point(
     )
     H_clifford_star = N_clifford_clock_star * P_clifford_clock_star
     H_star = H_rotation_star + H_clifford_star
-    T_depth_star = star_rotation_depth * distance * surface.t_cycle
-    T2_limit_star = benchmark.n_logical * T_depth_star / H_star
+    T_arch_star = star_rotation_depth_clocks * distance * surface.t_cycle
+    T2_limit_star = benchmark.n_logical * T_arch_star / H_star
     n_phys = star_compact_physical_qubits(benchmark.n_logical, distance)
-    nT_star = n_phys * T_depth_star
+    nT_star = n_phys * T_arch_star
 
     points.append(
         _comparison_point(
@@ -228,7 +228,7 @@ def _add_star_point(
             d=distance,
             p_phys=p_phys,
             n_logical=benchmark.n_logical,
-            T_arch=T_depth_star,
+            T_arch=T_arch_star,
             T2_limit=T2_limit_star,
             T_arch_units="us",
             T2_limit_units="us",
@@ -244,10 +244,11 @@ def _add_star_point(
             P_clifford_clock=P_clifford_clock_star,
             H_clifford=H_clifford_star,
             P_rot=P_rot_star,
-            rotation_depth=star_rotation_depth,
-            rotation_depth_clocks=star_rotation_depth,
+            rotation_depth=star_rotation_depth_clocks,
+            rotation_depth_clocks=star_rotation_depth_clocks,
             t_cycle_us=surface.t_cycle,
-            T_depth=T_depth_star,
+            T_arch_star_us=T_arch_star,
+            T_depth=T_arch_star,
         )
     )
 

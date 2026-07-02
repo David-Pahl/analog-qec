@@ -43,11 +43,11 @@ def surface_code_T(T_gate_count: float, distance: int, t_cycle: float) -> float:
 def surface_code_Tlogical(
     distance: int,
     Lambda: float,
-    Tlogical_3: float,
+    T2_distance_3: float,
     reference_Lambda: float = 2,
 ) -> float:
-    Tlogical_3_for_Lambda = Tlogical_3 * (Lambda / reference_Lambda) ** 2
-    return Tlogical_3_for_Lambda * Lambda ** ((distance - 3) / 2)
+    T2_distance_3_for_Lambda = T2_distance_3 * (Lambda / reference_Lambda) ** 2
+    return T2_distance_3_for_Lambda * Lambda ** ((distance - 3) / 2)
 
 
 def lattice_edge_count(lattice_shape: Tuple[int, int]) -> int:
