@@ -1,4 +1,4 @@
-"""Build comparison points for the exponent-based paper figure."""
+"""Build comparison points for the phenomenological resource-estimate figure."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Optional
 
-from analog_qec.exponent_comparison.config import (
-    ExponentComparisonConfig,
-    default_exponent_comparison_config,
+from analog_qec.phenomenological_resource_estimate.config import (
+    PhenomenologicalResourceEstimateConfig,
+    default_phenomenological_resource_estimate_config,
 )
-from analog_qec.exponent_comparison.metrics import (
+from analog_qec.phenomenological_resource_estimate.metrics import (
     failure_probability,
     lattice_edge_count,
     overhead,
@@ -27,7 +27,7 @@ from analog_qec.exponent_comparison.metrics import (
 
 @dataclass(frozen=True)
 class ComparisonPoint:
-    """One plotted point in the exponent comparison."""
+    """One plotted point in the resource estimate."""
 
     scheme: str
     group: str
@@ -51,11 +51,11 @@ class ComparisonPoint:
 
 
 def build_comparison_points(
-    config: Optional[ExponentComparisonConfig] = None,
+    config: Optional[PhenomenologicalResourceEstimateConfig] = None,
 ) -> List[ComparisonPoint]:
     """Build raw, EPS, STAR, and surface-code points in plot order."""
 
-    config = config or default_exponent_comparison_config()
+    config = config or default_phenomenological_resource_estimate_config()
     points: List[ComparisonPoint] = []
 
     benchmark = config.benchmark
@@ -113,7 +113,7 @@ def _comparison_point(
 
 def _add_raw_points(
     points: List[ComparisonPoint],
-    config: ExponentComparisonConfig,
+    config: PhenomenologicalResourceEstimateConfig,
     comparison_T: float,
 ) -> None:
     raw = config.raw
@@ -141,7 +141,7 @@ def _add_raw_points(
 
 def _add_eps_points(
     points: List[ComparisonPoint],
-    config: ExponentComparisonConfig,
+    config: PhenomenologicalResourceEstimateConfig,
     comparison_T: float,
 ) -> None:
     eps = config.eps
@@ -162,7 +162,7 @@ def _add_eps_points(
 
 def _add_star_points(
     points: List[ComparisonPoint],
-    config: ExponentComparisonConfig,
+    config: PhenomenologicalResourceEstimateConfig,
     surface_n_trotter_steps: int,
 ) -> None:
     benchmark = config.benchmark
@@ -188,7 +188,7 @@ def _add_star_points(
 
 def _add_star_point(
     points: List[ComparisonPoint],
-    config: ExponentComparisonConfig,
+    config: PhenomenologicalResourceEstimateConfig,
     distance: int,
     p_phys: float,
     star_rotation_depth: int,
@@ -246,7 +246,7 @@ def _add_star_point(
 
 def _add_surface_code_points(
     points: List[ComparisonPoint],
-    config: ExponentComparisonConfig,
+    config: PhenomenologicalResourceEstimateConfig,
     surface_T_depth: int,
     surface_T_count: int,
     surface_parallel_T_demand: int,

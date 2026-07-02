@@ -1,4 +1,4 @@
-"""Plotting helpers for the exponent-based resource comparison."""
+"""Plotting helpers for the phenomenological resource estimate."""
 
 from __future__ import annotations
 
@@ -8,8 +8,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from cycler import cycler
 
-from analog_qec.exponent_comparison.config import PlotConfig, default_plot_config
-from analog_qec.exponent_comparison.schemes import ComparisonPoint
+from analog_qec.phenomenological_resource_estimate.config import (
+    PlotConfig,
+    default_plot_config,
+)
+from analog_qec.phenomenological_resource_estimate.schemes import ComparisonPoint
 
 
 def apply_plot_style(plot_config: Optional[PlotConfig] = None) -> None:
@@ -24,12 +27,12 @@ def apply_plot_style(plot_config: Optional[PlotConfig] = None) -> None:
     plt.rcParams["lines.markersize"] = plot_config.marker_size
 
 
-def plot_exponent_comparison(
+def plot_phenomenological_resource_estimate(
     points: Iterable[ComparisonPoint],
     plot_config: Optional[PlotConfig] = None,
     ax: Optional[plt.Axes] = None,
 ):
-    """Plot the exponent comparison and return ``(fig, ax)``."""
+    """Plot the resource estimate and return ``(fig, ax)``."""
 
     plot_config = plot_config or default_plot_config()
     points = list(points)
@@ -239,7 +242,15 @@ def _format_axes(fig: plt.Figure, ax: plt.Axes, config: PlotConfig) -> None:
     ax.set_xlim(*config.xlim)
     ax.set_ylim(*config.ylim)
     ax.margins(x=0.04, y=0.08)
-    ax.set_xlabel(r"Cumulative register error exponent $H$")
+    failure_tick_positions, failure_tick_labels = _failure_probability_ticks(
+        ax.get_xlim(),
+        config,
+    )
+    ax.set_xticks(failure_tick_positions)
+    ax.set_xticklabels(failure_tick_labels)
+    ax.xaxis.set_minor_formatter(plt.NullFormatter())
+    ax.tick_params(axis="x", top=False, labeltop=False, bottom=True, labelbottom=True)
+    ax.set_xlabel(r"Failure probability $P_\mathrm{fail}=1-e^{-H}$")
     ax.set_ylabel("Space-Time Overhead (qubits x circuit depth)")
     ax.annotate(
         "Low error,\nLow overhead",
@@ -253,23 +264,22 @@ def _format_axes(fig: plt.Figure, ax: plt.Axes, config: PlotConfig) -> None:
     )
     ax.legend(loc="center left", frameon=True)
 
-    ax_top = ax.twiny()
-    ax_top.set_xscale("log")
-    ax_top.set_xlim(ax.get_xlim())
+    fig.tight_layout()
+
+
+def _failure_probability_ticks(
+    xlim: tuple[float, float],
+    config: PlotConfig,
+) -> tuple[list[float], list[str]]:
     pfail_ticks = np.array(config.top_axis_failure_ticks)
     H_ticks = -np.log1p(-pfail_ticks)
-    visible = (H_ticks >= ax.get_xlim()[0]) & (H_ticks <= ax.get_xlim()[1])
-    top_tick_positions = list(H_ticks[visible])
-    top_tick_labels = [f"{tick:g}" for tick in pfail_ticks[visible]]
-    if top_tick_positions[-1] < ax.get_xlim()[1]:
-        top_tick_positions.append(ax.get_xlim()[1])
-        top_tick_labels.append(r"$\to 1$")
-    ax_top.set_xticks(top_tick_positions)
-    ax_top.set_xticklabels(top_tick_labels)
-    ax_top.xaxis.set_minor_formatter(plt.NullFormatter())
-    ax_top.set_xlabel(r"Register failure probability $P_\mathrm{fail}=1-e^{-H}$")
-
-    fig.tight_layout()
+    visible = (H_ticks >= xlim[0]) & (H_ticks <= xlim[1])
+    tick_positions = list(H_ticks[visible])
+    tick_labels = [f"{tick:g}" for tick in pfail_ticks[visible]]
+    if tick_positions and tick_positions[-1] < xlim[1]:
+        tick_positions.append(xlim[1])
+        tick_labels.append(r"$\to 1$")
+    return tick_positions, tick_labels
 
 
 def _ordered_metadata_values(

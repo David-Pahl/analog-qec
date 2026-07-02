@@ -1,4 +1,4 @@
-"""Configuration defaults for the exponent-based comparison figure."""
+"""Configuration defaults for the phenomenological resource-estimate figure."""
 
 from __future__ import annotations
 
@@ -83,8 +83,8 @@ class STARConfig:
 
 
 @dataclass(frozen=True)
-class ExponentComparisonConfig:
-    """Complete configuration for building the comparison point set."""
+class PhenomenologicalResourceEstimateConfig:
+    """Complete configuration for building the resource-estimate point set."""
 
     benchmark: BenchmarkConfig = field(default_factory=BenchmarkConfig)
     raw: RawConfig = field(default_factory=RawConfig)
@@ -95,7 +95,7 @@ class ExponentComparisonConfig:
 
 @dataclass(frozen=True)
 class PlotConfig:
-    """Presentation defaults for the exponent comparison plot."""
+    """Presentation defaults for the resource-estimate plot."""
 
     palette: Tuple[str, ...] = (
         "#04CB93",
@@ -135,15 +135,15 @@ class PlotConfig:
     eps_annotation_offsets: Dict[str, Tuple[int, int]] = field(
         default_factory=lambda: {
             "EPS T1=50us": (-5, -10),
-            "EPS T1=100us": (0, 8),
-            "EPS T1=500us": (0, 8),
+            "EPS T1=100us": (-5, 8),
+            "EPS T1=500us": (-10, 8),
         }
     )
     raw_annotation_offsets: Dict[str, Tuple[int, int]] = field(
         default_factory=lambda: {
-            r"Raw $T_\phi=5\,\mu\mathrm{s}$": (24, 8),
-            r"Raw $T_\phi=10\,\mu\mathrm{s}$": (0, 22),
-            r"Raw $T_\phi=50\,\mu\mathrm{s}$": (0, 14),
+            r"Raw $T_\phi=5\,\mu\mathrm{s}$": (10, 8),
+            r"Raw $T_\phi=10\,\mu\mathrm{s}$": (0, -10),
+            r"Raw $T_\phi=50\,\mu\mathrm{s}$": (10, 8),
         }
     )
     lambda_label_distance: int = 3
@@ -152,7 +152,9 @@ class PlotConfig:
     )
     star_annotation_offsets_by_p: Dict[float, Dict[int, Tuple[int, int]]] = field(
         default_factory=lambda: {
-            5e-5: {3: (-5, -2), 5: (-5, -2), 7: (-5, -2), 9: (-5, -2)}
+            5e-5: {3: (-5, -2), 5: (-5, -2), 7: (-5, -2), 9: (-5, -0.5)},
+            1e-4: {3: (5, -2), 5: (5, -2), 7: (5, -2), 9: (5, -0.5)},
+            5e-4: {3: (5, -2), 5: (5, -2), 7: (5, -2), 9: (5, -2)},
         }
     )
     star_p_labels: Dict[float, str] = field(
@@ -163,7 +165,7 @@ class PlotConfig:
         }
     )
     star_p_label_offsets: Dict[float, Tuple[int, int]] = field(
-        default_factory=lambda: {5e-5: (0, -45), 1e-4: (40, -45), 5e-4: (45, -45)}
+        default_factory=lambda: {5e-5: (0, -50), 1e-4: (40, -50), 5e-4: (45, -50)}
     )
     surface_distance_label_offsets: Dict[int, Tuple[int, int]] = field(
         default_factory=lambda: {2: (4, 2), 4: (3, 3), 6: (0, -5)}
@@ -182,10 +184,10 @@ class PlotConfig:
     top_axis_failure_ticks: Tuple[float, ...] = (1e-3, 1e-2, 1e-1, 0.5, 0.9, 0.99)
 
 
-def default_exponent_comparison_config() -> ExponentComparisonConfig:
-    """Return a fresh copy of the paper-figure comparison defaults."""
+def default_phenomenological_resource_estimate_config() -> PhenomenologicalResourceEstimateConfig:
+    """Return a fresh copy of the paper-figure resource-estimate defaults."""
 
-    return ExponentComparisonConfig()
+    return PhenomenologicalResourceEstimateConfig()
 
 
 def default_plot_config() -> PlotConfig:

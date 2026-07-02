@@ -1,7 +1,8 @@
 # Resource Estimation Writeup Plan
 
 This note records the terminology and narrative plan for the resource-estimation
-markdown/manuscript section associated with `notebook/exponent-based-comparison.ipynb`.
+markdown/manuscript section associated with `notebook/05-phenomenological_resource_estimate.ipynb`
+and the `analog_qec.phenomenological_resource_estimate` package.
 
 ## Coherence Convention
 

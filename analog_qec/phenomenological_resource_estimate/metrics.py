@@ -1,11 +1,11 @@
-"""Pure formulas for the exponent-based resource comparison."""
+"""Pure formulas for the phenomenological resource estimate."""
 
 from __future__ import annotations
 
 import math
 from typing import Tuple
 
-from analog_qec.exponent_comparison.config import STARFitConfig
+from analog_qec.phenomenological_resource_estimate.config import STARFitConfig
 
 
 def register_error_exponent(n_logical: float, T_arch: float, T2_limit: float) -> float:
