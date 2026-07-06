@@ -216,8 +216,8 @@ class PlotConfig:
     )
     star_p_label_offsets_by_metric: Dict[str, Dict[float, Tuple[int, int]]] = field(
         default_factory=lambda: {
-            "space": {5e-5: (0, -50), 1e-4: (40, -50), 5e-4: (45, -50)},
-            "time": {5e-5: (0, -33), 1e-4: (40, -33), 5e-4: (45, -33)},
+            "space": {5e-5: (0, -64), 1e-4: (40, -64), 5e-4: (45, -64)},
+            "time": {5e-5: (0, -24), 1e-4: (40, -24), 5e-4: (45, -24)},
         }
     )
     surface_distance_label_offsets: Dict[int, Tuple[int, int]] = field(
@@ -228,7 +228,7 @@ class PlotConfig:
     ] = field(
         default_factory=lambda: {
             "space": {2: (4, 2), 4: (3, 3), 6: (0, -5)},
-            "time": {2: (4, 2), 4: (4, 8), 6: (0, -10)},
+            "time": {2: (4, 1), 4: (4, 4), 6: (0, -5)},
         }
     )
     label_bbox: Dict[str, object] = field(

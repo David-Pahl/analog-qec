@@ -496,8 +496,10 @@ def _metric_ylim(
 
     log_min = np.log10(positive_y_values.min())
     log_max = np.log10(positive_y_values.max())
-    log_padding = max(0.08 * (log_max - log_min), 0.15)
-    return 10 ** (log_min - log_padding), 10 ** (log_max + log_padding)
+    log_span = log_max - log_min
+    lower_padding = max(0.12 * log_span, 0.30)
+    upper_padding = max(0.10 * log_span, 0.25)
+    return 10 ** (log_min - lower_padding), 10 ** (log_max + upper_padding)
 
 
 def _log_lerp(bounds: tuple[float, float], fraction: float) -> float:
