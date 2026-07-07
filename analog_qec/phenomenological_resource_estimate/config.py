@@ -39,6 +39,7 @@ class EPSConfig:
     """EPS comparison assumptions."""
 
     space_overhead_factor: float = 2
+    time_overhead_factor: float = 1
     T2_values_us: Tuple[float, ...] = (100, 200, 1_000)
 
 
@@ -89,6 +90,7 @@ class ObservableTaskConfig:
     enabled: bool = True
     observable_set: str = "final XY energy density and radial transverse correlations"
     measurement_bases: Tuple[str, ...] = ("global X", "global Y")
+    error_sensitivity_qubits: float = 10
     target_standard_error: float = 1e-2
     single_shot_variance_bound: float = 1
     shots_per_basis: Optional[int] = None
@@ -97,6 +99,8 @@ class ObservableTaskConfig:
     def __post_init__(self) -> None:
         if len(self.measurement_bases) == 0:
             raise ValueError("measurement_bases must contain at least one basis")
+        if self.error_sensitivity_qubits <= 0:
+            raise ValueError("error_sensitivity_qubits must be positive")
         if self.target_standard_error <= 0:
             raise ValueError("target_standard_error must be positive")
         if self.single_shot_variance_bound < 0:

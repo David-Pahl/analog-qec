@@ -352,7 +352,7 @@ def _format_axes(
         labelbottom=show_xticklabels,
     )
     if show_xlabel:
-        ax.set_xlabel(r"Failure probability $P_\mathrm{fail}=1-e^{-H}$")
+        ax.set_xlabel(r"Error proxy probability $P_\mathrm{err}=1-e^{-H}$")
     else:
         ax.set_xlabel("")
     ax.set_ylabel(_y_axis_label(y_metric))

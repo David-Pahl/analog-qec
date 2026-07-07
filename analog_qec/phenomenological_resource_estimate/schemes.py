@@ -44,12 +44,17 @@ class ComparisonPoint:
     T_per_shot: Optional[float] = None
     task_repetitions: float = 1
 
+    @property
+    def P_err(self) -> float:
+        return self.P_fail
+
     def as_dict(self) -> Dict[str, Any]:
         point = {
             "scheme": self.scheme,
             "group": self.group,
             "label": self.label,
             "H": self.H,
+            "P_err": self.P_err,
             "P_fail": self.P_fail,
             "nT": self.nT,
             "n": self.n,
@@ -123,6 +128,7 @@ def _comparison_point(
         observable_task=task.observable_set,
         measurement_bases=task.measurement_bases,
         n_measurement_bases=len(task.measurement_bases),
+        error_sensitivity_qubits=task.error_sensitivity_qubits,
         target_standard_error=task.target_standard_error,
         single_shot_variance_bound=task.single_shot_variance_bound,
         effective_standard_error_bound=task.effective_standard_error_bound,
@@ -160,6 +166,12 @@ def _task_repetitions(task: ObservableTaskConfig, H: float) -> float:
     return repetitions
 
 
+def _error_sensitivity_qubits(
+    config: PhenomenologicalResourceEstimateConfig,
+) -> float:
+    return config.observable_task.error_sensitivity_qubits
+
+
 def _add_raw_points(
     points: List[ComparisonPoint],
     config: PhenomenologicalResourceEstimateConfig,
@@ -167,12 +179,13 @@ def _add_raw_points(
 ) -> None:
     raw = config.raw
     benchmark = config.benchmark
+    n_error = _error_sensitivity_qubits(config)
     n_raw = overhead(raw.space_overhead_factor, benchmark.n_logical)
     T_raw = overhead(raw.time_overhead_factor, comparison_T)
 
     for T_phi_raw in raw.T_phi_values_us:
         H_raw = register_error_exponent(
-            benchmark.n_logical,
+            n_error,
             T_raw,
             T_phi_raw,
         )
@@ -184,6 +197,9 @@ def _add_raw_points(
                 n_raw,
                 T_raw,
                 config.observable_task,
+                n_logical=benchmark.n_logical,
+                n_error=n_error,
+                error_exponent_model="observable lifetime sensitivity",
             )
         )
 
@@ -195,11 +211,12 @@ def _add_eps_points(
 ) -> None:
     eps = config.eps
     benchmark = config.benchmark
+    n_error = _error_sensitivity_qubits(config)
     n_eps = overhead(eps.space_overhead_factor, benchmark.n_logical)
-    T_eps = comparison_T
+    T_eps = overhead(eps.time_overhead_factor, comparison_T)
 
     for T2_eps in eps.T2_values_us:
-        H_eps = register_error_exponent(benchmark.n_logical, comparison_T, T2_eps)
+        H_eps = register_error_exponent(n_error, T_eps, T2_eps)
         points.append(
             _comparison_point(
                 "EPS",
@@ -208,6 +225,15 @@ def _add_eps_points(
                 n_eps,
                 T_eps,
                 config.observable_task,
+                n_logical=benchmark.n_logical,
+                n_error=n_error,
+                error_exponent_model="observable lifetime sensitivity",
+                space_overhead_factor=eps.space_overhead_factor,
+                time_overhead_factor=eps.time_overhead_factor,
+                T_arch=T_eps,
+                T_arch_units="us",
+                T2_limit=T2_eps,
+                T2_limit_units="us",
             )
         )
 
@@ -248,6 +274,7 @@ def _add_star_point(
     benchmark = config.benchmark
     surface = config.surface
     star = config.star
+    n_error = _error_sensitivity_qubits(config)
     n_edges = lattice_edge_count(benchmark.lattice_shape)
     N_rot_star = star_rotation_count(
         benchmark.lattice_shape,
@@ -256,17 +283,20 @@ def _add_star_point(
     )
     P_rot_star = 2 * p_phys / 15
     N_rotation_budget_star = 1 / (2 * P_rot_star)
-    H_rotation_star = N_rot_star / N_rotation_budget_star
+    H_rotation_star_full = N_rot_star / N_rotation_budget_star
     N_clifford_clock_star = star_rotation_depth_clocks
     P_clifford_clock_star = star_clifford_error_per_clock(
         distance,
         p_phys,
         star.clifford_fit,
     )
-    H_clifford_star = N_clifford_clock_star * P_clifford_clock_star
+    H_clifford_star_full = N_clifford_clock_star * P_clifford_clock_star
+    observable_sensitivity_factor = n_error / benchmark.n_logical
+    H_rotation_star = H_rotation_star_full * observable_sensitivity_factor
+    H_clifford_star = H_clifford_star_full * observable_sensitivity_factor
     H_star = H_rotation_star + H_clifford_star
     T_arch_star = star_rotation_depth_clocks * distance * surface.t_cycle
-    T2_limit_star = benchmark.n_logical * T_arch_star / H_star
+    T2_limit_star = n_error * T_arch_star / H_star
     n_phys = star_compact_physical_qubits(benchmark.n_logical, distance)
 
     points.append(
@@ -281,6 +311,8 @@ def _add_star_point(
             d=distance,
             p_phys=p_phys,
             n_logical=benchmark.n_logical,
+            n_error=n_error,
+            error_exponent_model="STAR operation-error model",
             T_arch=T_arch_star,
             T2_limit=T2_limit_star,
             T_arch_units="us",
@@ -292,10 +324,14 @@ def _add_star_point(
             n_phys=n_phys,
             N_rot=N_rot_star,
             N_rotation_budget=N_rotation_budget_star,
+            observable_sensitivity_factor=observable_sensitivity_factor,
             H_rotation=H_rotation_star,
+            H_rotation_full_register=H_rotation_star_full,
             N_clifford_clock=N_clifford_clock_star,
             P_clifford_clock=P_clifford_clock_star,
             H_clifford=H_clifford_star,
+            H_clifford_full_register=H_clifford_star_full,
+            H_full_register=H_rotation_star_full + H_clifford_star_full,
             P_rot=P_rot_star,
             rotation_depth=star_rotation_depth_clocks,
             rotation_depth_clocks=star_rotation_depth_clocks,
@@ -315,6 +351,7 @@ def _add_surface_code_points(
 ) -> None:
     benchmark = config.benchmark
     surface = config.surface
+    n_error = _error_sensitivity_qubits(config)
 
     def optimistic_T_factory_area(distance: int) -> float:
         return (
@@ -346,7 +383,7 @@ def _add_surface_code_points(
             n_surface_factory = optimistic_T_factory_area(distance)
             n_surface = n_surface_memory + n_surface_factory
             H_surface = register_error_exponent(
-                benchmark.n_logical,
+                n_error,
                 T_surface,
                 T2_surface,
             )
@@ -363,6 +400,9 @@ def _add_surface_code_points(
                         group=f"Surface code Lambda={Lambda_surface}",
                         Lambda=Lambda_surface,
                         d=distance,
+                        n_logical=benchmark.n_logical,
+                        n_error=n_error,
+                        error_exponent_model="observable lifetime sensitivity",
                         n_memory=n_surface_memory,
                         n_factory=n_surface_factory,
                         T_depth=surface_T_depth,

@@ -42,9 +42,9 @@ Use a claim with this shape:
 
 > Having established that EPS can suppress dephasing to approach the
 > relaxation-limited lifetime, we compare the resulting coherence-limited
-> register exponent against deliberately optimistic STAR and surface-code
+> error exponent against deliberately optimistic STAR and surface-code
 > baselines. Across the plotted regimes, EPS occupies a favorable region of
-> low observable-estimation space-time cost and low cumulative register-failure
+> low observable-estimation space-time cost and low cumulative error-proxy
 > exponent.
 
 Avoid stronger claims such as:
@@ -67,20 +67,33 @@ Prefer:
 
 The main text should explain only the minimum needed to read the plot:
 
-1. The x-axis is the cumulative register error exponent
-   `H = n_logical T_arch / T2_limit`, with `P_fail = 1-exp(-H)`.
+1. The x-axis is the cumulative observable-sensitive error exponent
+   `H = n_eff T_arch / T2_limit`, with `P_err = 1-exp(-H)`.
 2. The y-axis is task-level physical-qubit-time, `nT`, after multiplying the
    single-shot circuit time by the observable-estimation shot count.
 3. The default task estimates final XY energy density and radial transverse
    correlations from global X and global Y measurement bases.
 4. The shot count is `ceil(Var/epsilon^2)` per basis, using `Var<=1` and
    `epsilon=1e-2`, for 10,000 shots per basis and 20,000 total shots.
-5. Raw and EPS use the analog evolution time directly.
+5. Raw uses the analog evolution time directly; EPS uses
+   `T_EPS = lambda*T_analog` when the encoded simulation is a factor `lambda`
+   slower.
 6. EPS uses the simulation-motivated relaxation-limited regime
    `T2 = 2T1`.
 7. STAR and surface-code depths are converted to microseconds using a QEC cycle
-   time.
+   time. Surface code applies `n_eff` through its logical-lifetime exponent;
+   STAR applies the same observable factor by multiplying its full operation
+   budget by `n_eff/n_logical`.
 8. The encoded baselines intentionally use optimistic assumptions.
+9. The default `n_eff=10` is a phenomenological sensitivity factor for energy
+   density plus radial transverse correlations; `n_eff=4` is appropriate for
+   energy-density-only sensitivity, while `n_eff=50` recovers strict register
+   survival. This is not a formula copied from a single paper; it is a
+   one-parameter proxy motivated by observable-sensitive simulation analyses,
+   including Granet and Dreyer's error-dilution picture for local observables,
+   Trivedi, Rubio, and Cirac's stability results for local intensive observables
+   in noisy analog simulators, and Yu, Xu, and Zhao's observable-driven
+   product-formula error analysis.
 
 Do not overload the main text with every constant. One or two representative
 examples are enough; the appendix should carry the full table.
@@ -89,7 +102,7 @@ examples are enough; the appendix should carry the full table.
 
 The single-column figure should visually support the intended claim:
 
-- Keep the top axis mapping `H` to `P_fail`, because it makes the exponent
+- Keep the top axis mapping `H` to `P_err`, because it makes the exponent
   interpretable.
 - Keep EPS visually simple and readable.
 - Label STAR and surface-code curves clearly as optimistic baselines or explain
@@ -102,8 +115,9 @@ The single-column figure should visually support the intended claim:
 Suggested caption skeleton:
 
 > Phenomenological resource-error comparison for a 50-logical-qubit analog
-> benchmark. The horizontal axis gives the cumulative register-failure exponent
-> `H`, with the corresponding failure probability shown on the top axis; the
+> benchmark. The horizontal axis gives the cumulative observable-sensitive
+> error exponent `H`, with the corresponding proxy error probability shown on
+> the top axis; the
 > vertical axis gives the task-level physical-qubit-time cost to estimate final
 > XY energy density and transverse correlations using the stated shot model. EPS
 > points use the relaxation-limited coherence regime established in the
@@ -117,18 +131,19 @@ Add an appendix section with approximately this structure:
 
 ### A. Resource-Estimate Definitions
 
-- Define `H`, `P_fail`, `nT`, `T_arch`, and `T2_limit`.
+- Define `H`, `P_err`, `nT`, `T_arch`, and `T2_limit`.
 - Define the observable-estimation shot multiplier
   `N_shots/basis=ceil(Var/epsilon^2)` and distinguish single-shot
   `T_arch`/`nT` from task-level `T`/`nT`.
 - State that `T2_limit` is a physical coherence convention for Raw/EPS and an
   effective logical limiting lifetime for encoded schemes.
-- Explain that STAR and surface code use the same register-exponent axis, but
-  reach `T2_limit` differently:
+- Explain that STAR and surface code use the same observable-sensitive exponent
+  axis, but reach `T2_limit` differently:
   - Surface code starts from an assumed logical-lifetime scaling and computes
     `H`.
   - STAR starts from a rotation-plus-Clifford operation-error budget and
-    back-solves the equivalent `T2_limit`.
+    first applies the same `n_eff/n_logical` observable factor before
+    back-solving the equivalent `T2_limit`.
 
 ### B. Architecture-Specific Calculations
 
@@ -242,7 +257,7 @@ Possible opening:
 > coherence gain survives a systems-level comparison against encoded
 > alternatives. To avoid overstating the EPS advantage, we use optimistic
 > assumptions for the STAR and surface-code baselines and report the resulting
-> cumulative register-failure exponent versus the physical-qubit-time cost of a
+> cumulative observable-sensitive error exponent versus the physical-qubit-time cost of a
 > fixed observable-estimation task.
 
 Possible closing:

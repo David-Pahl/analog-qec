@@ -8,8 +8,12 @@ from typing import Tuple
 from analog_qec.phenomenological_resource_estimate.config import STARFitConfig
 
 
-def register_error_exponent(n_logical: float, T_arch: float, T2_limit: float) -> float:
-    return n_logical * T_arch / T2_limit
+def register_error_exponent(
+    n_effective: float,
+    T_arch: float,
+    T2_limit: float,
+) -> float:
+    return n_effective * T_arch / T2_limit
 
 
 def failure_probability(H: float) -> float:

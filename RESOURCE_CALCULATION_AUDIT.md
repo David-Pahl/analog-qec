@@ -14,39 +14,46 @@ The current source of truth is the package
 - `analog_qec/phenomenological_resource_estimate/plotting.py`: plotting only; it does not
   change the resource values.
 
-The current generator returns 34 plotted points: 3 Raw, 3 EPS, 12 STAR, and
-16 Surface-code points. By default, each point includes the measurement shots
+The current generator returns 33 plotted points: 3 Raw, 3 EPS, 12 STAR, and
+15 Surface-code points. By default, each point includes the measurement shots
 needed for a modest observable-estimation task: final XY energy density plus
 radial transverse correlations, measured in global X and global Y bases.
 
 ## Overview
 
-The x-axis is the cumulative register error exponent
+The x-axis is the cumulative error-proxy exponent
 
 ```math
-H = n_\mathrm{logical} T_\mathrm{arch}/T_{2,\mathrm{limit}},
+H = n_\mathrm{eff} T_\mathrm{arch}/T_{2,\mathrm{limit}},
 ```
 
-with register failure probability
+with proxy error probability
 
 ```math
-P_\mathrm{fail}=1-\exp(-H).
+P_\mathrm{err}=1-\exp(-H).
 ```
 
-Here `T2_limit` means the limiting lifetime used in the register-exponent
-model. For Raw/EPS this is a physical coherence-time convention. For the
-encoded schemes it is an effective logical limiting lifetime. This model is
-used directly for Raw, EPS, and Surface-code points. For STAR, the STAR
-paper's rotation and logical-Clifford error model first gives
+Here `n_eff` is `ObservableTaskConfig.error_sensitivity_qubits`. The default
+uses `n_eff=10` for the current energy-density plus radial-correlator task;
+`n_eff=4` is a useful energy-density-only setting, and `n_eff=50` recovers the
+strict register-survival model. `T2_limit` means the limiting lifetime used in
+the exponent model. For Raw/EPS this is a physical coherence-time convention.
+For the encoded schemes it is an effective logical limiting lifetime. This
+model is used directly for Raw, EPS, and Surface-code points. For STAR, the STAR
+paper's rotation and logical-Clifford error model first gives a full-circuit
+operation exponent, which is then multiplied by `n_eff/n_logical` for the
+observable-sensitive x-axis:
 
 ```math
-H_\mathrm{STAR}=H_\mathrm{rot}+H_\mathrm{Cliff}.
+H_\mathrm{STAR}
+=\frac{n_\mathrm{eff}}{n_\mathrm{logical}}
+\left(H_{\mathrm{rot,full}}+H_{\mathrm{Cliff,full}}\right).
 ```
 
 The STAR section below then converts this into an equivalent
-`T2_limit = n_logical*T_arch/H_STAR`, so STAR also has the same limiting-lifetime
-interpretation on the x-axis. The distinction is that Surface code takes its
-effective logical lifetime as an input scaling model, while STAR computes the
+`T2_limit = n_eff*T_arch/H_STAR`, so STAR also has the same limiting-lifetime
+metadata convention. The distinction is that Surface code takes its effective
+logical lifetime as an input scaling model, while STAR computes the
 operation-failure exponent first and then back-solves the equivalent lifetime
 that would give the same exponent.
 
@@ -54,7 +61,9 @@ The default y-axis is the task-level space-time cost `nT` in
 physical-qubit-microseconds. The single-shot circuit values are still stored as
 `T_per_shot` and `nT_per_shot` on each `ComparisonPoint`; the plotted `T` and
 `nT` multiply those values by the configured observable-estimation shot count.
-Raw and EPS use the analog evolution time directly. Surface-code and STAR
+Raw uses the analog evolution time directly. EPS uses that time multiplied by
+its configured `time_overhead_factor`, so an EPS simulation that is a factor
+`\lambda` slower has `T_EPS = \lambda T_analog`. Surface-code and STAR
 depths are first counted in QEC cycles or STAR clocks and then converted to
 microseconds with the QEC cycle time. In the current default configuration
 `t_cycle = 1`, interpreted as `1 us`, so the cycle-depth numbers are
@@ -88,14 +97,14 @@ The optional config flag `include_success_retry_overhead` additionally
 multiplies the task repetitions by `exp(H)`, corresponding to retrying
 heralded failed attempts. It is disabled by default because Raw/EPS failures
 are not assumed to be heralded and because the x-axis is still a per-circuit
-register-failure exponent, not a full sampling-bias analysis.
+error proxy, not a full sampling-bias analysis.
 
 ## Source of Truth
 
 | Quantity | Current implementation | Formula |
 | --- | --- | --- |
-| Register exponent | `metrics.register_error_exponent` | `H = n_logical * T_arch / T2_limit` |
-| Failure probability | `metrics.failure_probability` | `P_fail = 1 - exp(-H)` |
+| Error exponent | `metrics.register_error_exponent` | `H = n_eff * T_arch / T2_limit` |
+| Error-proxy probability | `metrics.failure_probability` | `P_err = 1 - exp(-H)` |
 | Multiplicative overhead | `metrics.overhead` | `multiplier * value` |
 | Heralded retry multiplier | `metrics.success_retry_multiplier` | `exp(H)` |
 | Observable shots per basis | `ObservableTaskConfig.computed_shots_per_basis` | `ceil(Var/epsilon**2)` |
@@ -107,7 +116,7 @@ register-failure exponent, not a full sampling-bias analysis.
 | STAR rotation count | `metrics.star_rotation_count` | `n_steps * n_edges * rotations_per_edge` |
 | STAR compact physical qubits | `metrics.star_compact_physical_qubits` | `(1.5*n_logical + 5) * 2*d**2` |
 | STAR Clifford error per clock | `metrics.star_clifford_error_per_clock` | `C_Z*(p/p_th_Z)^((d+1)/2) + C_X*(p/p_th_X)^((d+1)/2)` |
-| STAR equivalent limiting lifetime | `_add_star_point` | `T2_limit = n_logical * T_arch / H_star` |
+| STAR equivalent limiting lifetime | `_add_star_point` | `T2_limit = n_eff * T_arch / H_star` |
 
 ## Shared Benchmark
 
@@ -143,6 +152,7 @@ estimate a simple XY-model observable set. It uses:
 | --- | ---: | --- |
 | Observable set | final XY energy density and radial transverse correlations | Measured after the `Jt=20*2*pi` evolution. |
 | Measurement bases | global X, global Y | Global X gives all `X_i X_j` samples; global Y gives all `Y_i Y_j` samples. |
+| Error sensitivity | `n_eff=10` | Observable-level proxy for the lifetime exponent. |
 | Single-shot variance bound | `Var <= 1` | Conservative bounded Pauli-estimator variance. |
 | Target standard error | `epsilon = 1e-2` | Illustrative percent-level additive precision. |
 | Shots per basis | `ceil(1/(1e-2)^2) = 10000` | Computed from `ceil(Var/epsilon^2)`. |
@@ -163,6 +173,25 @@ the global Y basis. For a single Pauli product, `Var = 1 - <P>^2 <= 1`. For
 energy density or radial averages, the actual variance is the variance of the
 full averaged per-shot estimator, including covariance between terms; the
 bounded default deliberately avoids assuming favorable covariance cancellation.
+
+The error exponent uses `n_eff=10` rather than the full `n_logical=50` by
+default. This does not assume that an error spreads instantly across the
+register. It is a phenomenological observable-sensitivity factor: for energy
+density alone, one local fault directly touches `O(2|E|/n)` nearby edge terms,
+and the `5x10` lattice has average degree `2*85/50=3.4`, so `n_eff=4` is a
+natural optimistic energy-density-only setting. The radial transverse
+correlators add several averaged two-point diagnostics, so the default uses
+`n_eff=10`. Setting `n_eff=50` recovers the conservative register-survival
+interpretation where any qubit error spoils the shot.
+
+This specific scalar `n_eff` model is an internal phenomenological proxy, not a
+formula quoted directly from the simulation literature. It is motivated by
+observable-sensitive simulation analyses showing that local or intensive
+observables can be less sensitive to extensive microscopic errors than a
+full-state or full-register survival criterion. See Granet and Dreyer's
+"dilution of error" analysis for digital Hamiltonian simulation, Trivedi,
+Rubio, and Cirac's stability analysis for noisy analog simulators, and Yu, Xu,
+and Zhao's observable-driven product-formula analysis in the literature ledger.
 
 This observable choice is motivated by the 69-qubit analog-digital XY-magnet
 experiment, which emphasizes energy density, transverse correlations,
@@ -212,20 +241,21 @@ nT_{\mathrm{Raw,task}}=20000*25=500000.
 Raw exponent:
 
 ```math
-H_\mathrm{Raw}=50*0.5/T_\phi = 25/T_\phi.
+H_\mathrm{Raw}=n_\mathrm{eff}*0.5/T_\phi = 5/T_\phi
+\quad\text{for }n_\mathrm{eff}=10.
 ```
 
-| Label | `T_phi` used as `T2_limit` (us) | `H` | `P_fail` | `nT_per_shot` | task `nT` | task time (s) |
+| Label | `T_phi` used as `T2_limit` (us) | `H` | `P_err` | `nT_per_shot` | task `nT` | task time (s) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `Raw T_phi=5 us` | 5 | 5.000000 | 0.993262 | 25 | 500,000 | 0.01 |
-| `Raw T_phi=10 us` | 10 | 2.500000 | 0.917915 | 25 | 500,000 | 0.01 |
-| `Raw T_phi=50 us` | 50 | 0.500000 | 0.393469 | 25 | 500,000 | 0.01 |
+| `Raw T_phi=5 us` | 5 | 1.000000 | 0.632121 | 25 | 500,000 | 0.01 |
+| `Raw T_phi=10 us` | 10 | 0.500000 | 0.393469 | 25 | 500,000 | 0.01 |
+| `Raw T_phi=50 us` | 50 | 0.100000 | 0.095163 | 25 | 500,000 | 0.01 |
 
 Calculation check for `T_phi=10 us`:
 
 ```math
-H=50*0.5/10=2.5,
-\qquad P_\mathrm{fail}=1-e^{-2.5}=0.917915.
+H=10*0.5/10=0.5,
+\qquad P_\mathrm{err}=1-e^{-0.5}=0.393469.
 ```
 
 ## EPS Points
@@ -252,38 +282,42 @@ EPS overhead:
 
 ```math
 T_{\mathrm{EPS,per\ shot}}
-=0.5\ \mu\mathrm{s},
+=\lambda T_\mathrm{analog},
 \qquad
 nT_{\mathrm{EPS,per\ shot}}
-=(2*n_\mathrm{logical})T_\mathrm{analog}
-=(2*50)*0.5=50.
+=(2*n_\mathrm{logical})\lambda T_\mathrm{analog}.
 ```
+
+The current default uses `lambda = 1`, so `T_EPS,per shot = 0.5 us` and
+`nT_EPS,per shot = 50`. Setting `EPSConfig.time_overhead_factor` to another
+value scales these EPS time and space-time costs by that value.
 
 The task-level plotted values multiply by `N_task=20000`:
 
 ```math
-T_{\mathrm{EPS,task}}=20000*0.5\ \mu\mathrm{s}=0.01\ \mathrm{s},
+T_{\mathrm{EPS,task}}=20000*\lambda*0.5\ \mu\mathrm{s},
 \qquad
-nT_{\mathrm{EPS,task}}=20000*50=1000000.
+nT_{\mathrm{EPS,task}}=20000*(2*50)*\lambda*0.5.
 ```
 
 EPS exponent:
 
 ```math
-H_\mathrm{EPS}=50*0.5/T_2=25/T_2.
+H_\mathrm{EPS}=n_\mathrm{eff}\lambda*0.5/T_2=5\lambda/T_2
+\quad\text{for }n_\mathrm{eff}=10.
 ```
 
-| Label | Stored `T2_limit` (us) | Implied `T1` (us) | `H` | `P_fail` | `nT_per_shot` | task `nT` | task time (s) |
+| Label | Stored `T2_limit` (us) | Implied `T1` (us) | `H` | `P_err` | `nT_per_shot` | task `nT` | task time (s) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `EPS T1=50us` | 100 | 50 | 0.250000 | 0.221199 | 50 | 1,000,000 | 0.01 |
-| `EPS T1=100us` | 200 | 100 | 0.125000 | 0.117503 | 50 | 1,000,000 | 0.01 |
-| `EPS T1=500us` | 1000 | 500 | 0.025000 | 0.024690 | 50 | 1,000,000 | 0.01 |
+| `EPS T1=50us` | 100 | 50 | 0.050000 | 0.048771 | 50 | 1,000,000 | 0.01 |
+| `EPS T1=100us` | 200 | 100 | 0.025000 | 0.024690 | 50 | 1,000,000 | 0.01 |
+| `EPS T1=500us` | 1000 | 500 | 0.005000 | 0.004988 | 50 | 1,000,000 | 0.01 |
 
 Calculation check for `T2=200 us`:
 
 ```math
-H=50*0.5/200=0.125,
-\qquad P_\mathrm{fail}=1-e^{-0.125}=0.117503.
+H=10*0.5/200=0.025,
+\qquad P_\mathrm{err}=1-e^{-0.025}=0.024690.
 ```
 
 ## STAR Points
@@ -291,33 +325,43 @@ H=50*0.5/200=0.125,
 Current implementation: `_add_star_points()` and `_add_star_point()`.
 
 STAR is plotted as a partial-FTQC reference model. Its literature-backed error
-model first gives an operation-budget exponent:
+model first gives a full-circuit operation-budget exponent:
 
 ```math
-H_\mathrm{STAR}=H_\mathrm{rot}+H_\mathrm{Cliff}.
+H_{\mathrm{STAR,full}}=H_{\mathrm{rot,full}}+H_{\mathrm{Cliff,full}}.
 ```
 
 To put STAR on the same x-axis convention as Raw, EPS, and Surface code, the
-current implementation then reports an effective logical limiting lifetime
-
-```math
-T_{2,\mathrm{limit}}^\mathrm{STAR}
-=n_\mathrm{logical}T_\mathrm{arch,STAR}/H_\mathrm{STAR}.
-```
-
-This makes the plotted STAR exponent algebraically identical to the shared
-register-exponent definition:
+current implementation scales this exponent by the same observable-sensitivity
+factor used for the lifetime branches:
 
 ```math
 H_\mathrm{STAR}
-=n_\mathrm{logical}T_\mathrm{arch,STAR}/T_{2,\mathrm{limit}}^\mathrm{STAR}.
+=\frac{n_\mathrm{eff}}{n_\mathrm{logical}}H_{\mathrm{STAR,full}}.
 ```
 
-This is conceptually the same register-level role played by
-`T_{2,\mathrm{logical}}` in the Surface-code section. The difference is the
+It then reports an effective logical limiting lifetime
+
+```math
+T_{2,\mathrm{limit}}^\mathrm{STAR}
+=n_\mathrm{eff}T_\mathrm{arch,STAR}/H_\mathrm{STAR}.
+```
+
+This makes the STAR equivalent-lifetime metadata algebraically identical to the
+shared `n_eff` exponent convention:
+
+```math
+H_\mathrm{STAR}
+=n_\mathrm{eff}T_\mathrm{arch,STAR}/T_{2,\mathrm{limit}}^\mathrm{STAR}.
+```
+
+This is conceptually the same lifetime-normalization role played by
+`T_{2,\mathrm{logical}}` in the Surface-code section, while preserving the
+unscaled full-circuit STAR exponent in point metadata. The difference is the
 direction of the calculation: the surface-code model starts from an assumed
 logical-lifetime scaling and computes `H`, whereas STAR starts from the
-operation-error budget and reports the lifetime that reproduces that `H`.
+operation-error budget, applies the same `n_eff/n_logical` observable-sensitivity
+factor, and reports the lifetime that reproduces that scaled `H`.
 
 Shared STAR/Trotter quantities:
 
@@ -368,6 +412,10 @@ N_\mathrm{rot,budget}=1/(2P_\mathrm{rot}),
 H_\mathrm{rot}=N_\mathrm{rot}/N_\mathrm{rot,budget}.
 ```
 
+The plotted STAR table reports `H_rot=(n_eff/n_logical)N_rot/N_rot,budget`.
+The unscaled full-circuit value is retained in metadata as
+`H_rotation_full_register`.
+
 This is backed by Akahoshi et al., Sec. VI B and Appendix A, where the injected
 rotation error scales as `P_L,rotation = 2p/15 + O(p^2)`, and by Sec. VI C,
 where the available number of rotations is estimated as
@@ -399,6 +447,10 @@ H_\mathrm{Cliff}=N_\mathrm{Cliff,clock} P_\mathrm{Cliff},
 \qquad N_\mathrm{Cliff,clock}=11520.
 ```
 
+The plotted STAR table reports
+`H_Cliff=(n_eff/n_logical)N_Cliff,clock P_Cliff`. The unscaled full-circuit
+value is retained in metadata as `H_clifford_full_register`.
+
 Space-time overhead:
 
 ```math
@@ -421,35 +473,36 @@ With the current default `t_cycle = 1 us`, this gives the same numerical values
 as the previous cycle-depth table. If a different QEC cycle time is used, all
 STAR `T_arch`, `T2_limit`, and `nT` values scale linearly with it. The
 underlying STAR failure mechanism is still the STAR rotation-plus-Clifford
-operation model, but the plotted point now has an explicit effective limiting
-lifetime in microseconds.
+operation model, but the plotted point now applies the same observable
+sensitivity factor as the other architectures and has an explicit effective
+limiting lifetime in microseconds.
 
 The compact-patch count is backed by Akahoshi et al., Sec. V, which states that
 the compact block requires `1.5n+5` logical patches to allocate `n` data logical
 qubits, and by Sec. VI C, which uses approximately `2d^2` physical qubits per
 logical patch.
 
-| `p` | `d` | `H_rot` | `H_Cliff` | `H` | `T_arch_us` | task time (s) | `T2_limit_us` | `P_fail` | `n_phys` | `nT_per_shot` | task `nT` |
+| `p` | `d` | `H_rot` | `H_Cliff` | `H` | `T_arch_us` | task time (s) | `T2_limit_us` | `P_err` | `n_phys` | `nT_per_shot` | task `nT` |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 5e-5 | 3 | 0.181333 | 0.268227 | 0.449561 | 34,560 | 691.2 | 3,843,753 | 0.362092 | 1,440 | 49,766,400 | 995,328,000,000 |
-| 5e-5 | 5 | 0.181333 | 0.003352 | 0.184685 | 57,600 | 1152 | 15,594,128 | 0.168634 | 4,000 | 230,400,000 | 4,608,000,000,000 |
-| 5e-5 | 7 | 0.181333 | 0.000042 | 0.181375 | 80,640 | 1612.8 | 22,230,152 | 0.165878 | 7,840 | 632,217,600 | 12,644,352,000,000 |
-| 5e-5 | 9 | 0.181333 | 0.000001 | 0.181334 | 103,680 | 2073.6 | 28,588,152 | 0.165843 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
-| 1e-4 | 3 | 0.362667 | 1.072909 | 1.435576 | 34,560 | 691.2 | 1,203,698 | 0.762022 | 1,440 | 49,766,400 | 995,328,000,000 |
-| 1e-4 | 5 | 0.362667 | 0.026813 | 0.389479 | 57,600 | 1152 | 7,394,490 | 0.322590 | 4,000 | 230,400,000 | 4,608,000,000,000 |
-| 1e-4 | 7 | 0.362667 | 0.000671 | 0.363338 | 80,640 | 1612.8 | 11,097,113 | 0.304648 | 7,840 | 632,217,600 | 12,644,352,000,000 |
-| 1e-4 | 9 | 0.362667 | 0.000017 | 0.362683 | 103,680 | 2073.6 | 14,293,455 | 0.304193 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
-| 5e-4 | 3 | 1.813333 | 26.822724 | 28.636057 | 34,560 | 691.2 | 60,344 | 1.000000 | 1,440 | 49,766,400 | 995,328,000,000 |
-| 5e-4 | 5 | 1.813333 | 3.351564 | 5.164897 | 57,600 | 1152 | 557,610 | 0.994286 | 4,000 | 230,400,000 | 4,608,000,000,000 |
-| 5e-4 | 7 | 1.813333 | 0.419414 | 2.232747 | 80,640 | 1612.8 | 1,805,847 | 0.892767 | 7,840 | 632,217,600 | 12,644,352,000,000 |
-| 5e-4 | 9 | 1.813333 | 0.052564 | 1.865897 | 103,680 | 2073.6 | 2,778,288 | 0.845243 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
+| 5e-5 | 3 | 0.036267 | 0.053645 | 0.089912 | 34,560 | 691.2 | 3,843,753 | 0.085988 | 1,440 | 49,766,400 | 995,328,000,000 |
+| 5e-5 | 5 | 0.036267 | 0.000670 | 0.036937 | 57,600 | 1152 | 15,594,128 | 0.036263 | 4,000 | 230,400,000 | 4,608,000,000,000 |
+| 5e-5 | 7 | 0.036267 | 0.000008 | 0.036275 | 80,640 | 1612.8 | 22,230,152 | 0.035625 | 7,840 | 632,217,600 | 12,644,352,000,000 |
+| 5e-5 | 9 | 0.036267 | 0.000000 | 0.036267 | 103,680 | 2073.6 | 28,588,152 | 0.035617 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
+| 1e-4 | 3 | 0.072533 | 0.214582 | 0.287115 | 34,560 | 691.2 | 1,203,698 | 0.249575 | 1,440 | 49,766,400 | 995,328,000,000 |
+| 1e-4 | 5 | 0.072533 | 0.005363 | 0.077896 | 57,600 | 1152 | 7,394,490 | 0.074939 | 4,000 | 230,400,000 | 4,608,000,000,000 |
+| 1e-4 | 7 | 0.072533 | 0.000134 | 0.072668 | 80,640 | 1612.8 | 11,097,113 | 0.070090 | 7,840 | 632,217,600 | 12,644,352,000,000 |
+| 1e-4 | 9 | 0.072533 | 0.000003 | 0.072537 | 103,680 | 2073.6 | 14,293,455 | 0.069968 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
+| 5e-4 | 3 | 0.362667 | 5.364545 | 5.727211 | 34,560 | 691.2 | 60,344 | 0.996744 | 1,440 | 49,766,400 | 995,328,000,000 |
+| 5e-4 | 5 | 0.362667 | 0.670313 | 1.032979 | 57,600 | 1152 | 557,610 | 0.644055 | 4,000 | 230,400,000 | 4,608,000,000,000 |
+| 5e-4 | 7 | 0.362667 | 0.083883 | 0.446549 | 80,640 | 1612.8 | 1,805,847 | 0.360168 | 7,840 | 632,217,600 | 12,644,352,000,000 |
+| 5e-4 | 9 | 0.362667 | 0.010513 | 0.373179 | 103,680 | 2073.6 | 2,778,288 | 0.311458 | 12,960 | 1,343,692,800 | 26,873,856,000,000 |
 
 Calculation check for `p=1e-4, d=7`:
 
 ```math
 P_\mathrm{rot}=2(10^{-4})/15=1.333333...*10^{-5},
 N_\mathrm{rot,budget}=1/(2P_\mathrm{rot})=37500,
-H_\mathrm{rot}=13600/37500=0.3626667.
+H_{\mathrm{rot,full}}=13600/37500=0.3626667.
 ```
 
 ```math
@@ -460,9 +513,18 @@ P_\mathrm{Cliff}
 ```
 
 ```math
-H_\mathrm{Cliff}=11520(5.82519*10^{-8})=0.0006711,
+H_{\mathrm{Cliff,full}}=11520(5.82519*10^{-8})=0.0006711.
+```
+
+With the default observable-sensitivity factor
+`n_eff/n_logical = 10/50 = 0.2`:
+
+```math
+H_\mathrm{rot}=0.2*0.3626667=0.0725333,
 \qquad
-H=0.3633377.
+H_\mathrm{Cliff}=0.2*0.0006711=0.0001342,
+\qquad
+H=0.0726675.
 ```
 
 ```math
@@ -483,7 +545,7 @@ The equivalent limiting lifetime for the same point is
 
 ```math
 T_{2,\mathrm{limit}}^\mathrm{STAR}
-=50*80640/0.3633377
+=10*80640/0.0726675
 =11097113\ \mu\mathrm{s}.
 ```
 
@@ -575,24 +637,23 @@ time steps to `d` code cycles, giving leading-order space-time cost
 `s*t*d^3`. The exact project choices `T_depth_per_arbitrary_rotation=10` and
 `T_factory_patch_equivalents=8` remain internal optimistic constants.
 
-| `Lambda` | `d` | `T2_logical` | `H` | `P_fail` | `n_memory` | `n_factory` | `T_surface_us` | task time (s) | `nT_per_shot` | task `nT` |
+| `Lambda` | `d` | `T2_logical` | `H` | `P_err` | `n_memory` | `n_factory` | `T_surface_us` | task time (s) | `nT_per_shot` | task `nT` |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4 | 13 | 409,600 | 10.156250 | 0.999961 | 16,850 | 59,312 | 83,200 | 1664 | 6,336,678,400 | 126,733,568,000,000 |
-| 4 | 15 | 1,638,400 | 2.929688 | 0.946586 | 22,450 | 79,024 | 96,000 | 1920 | 9,741,504,000 | 194,830,080,000,000 |
-| 4 | 17 | 6,553,600 | 0.830078 | 0.563985 | 28,850 | 101,552 | 108,800 | 2176 | 14,187,737,600 | 283,754,752,000,000 |
-| 4 | 19 | 26,214,400 | 0.231934 | 0.207001 | 36,050 | 126,896 | 121,600 | 2432 | 19,814,233,600 | 396,284,672,000,000 |
-| 4 | 21 | 104,857,600 | 0.064087 | 0.062077 | 44,050 | 155,056 | 134,400 | 2688 | 26,759,846,400 | 535,196,928,000,000 |
-| 4 | 23 | 419,430,400 | 0.017548 | 0.017395 | 52,850 | 186,032 | 147,200 | 2944 | 35,163,430,400 | 703,268,608,000,000 |
-| 4 | 25 | 1,677,721,600 | 0.004768 | 0.004757 | 62,450 | 219,824 | 160,000 | 3200 | 45,163,840,000 | 903,276,800,000,000 |
-| 4 | 27 | 6,710,886,400 | 0.001287 | 0.001287 | 72,850 | 256,432 | 172,800 | 3456 | 56,899,929,600 | 1,137,998,592,000,000 |
-| 4 | 29 | 26,843,545,600 | 0.000346 | 0.000346 | 84,050 | 295,856 | 185,600 | 3712 | 70,510,553,600 | 1,410,211,072,000,000 |
-| 6 | 9 | 194,400 | 14.814815 | 1.000000 | 8,050 | 28,336 | 57,600 | 1152 | 2,095,833,600 | 41,916,672,000,000 |
-| 6 | 11 | 1,166,400 | 3.017833 | 0.951093 | 12,050 | 42,416 | 70,400 | 1408 | 3,834,406,400 | 76,688,128,000,000 |
-| 6 | 13 | 6,998,400 | 0.594422 | 0.448118 | 16,850 | 59,312 | 83,200 | 1664 | 6,336,678,400 | 126,733,568,000,000 |
-| 6 | 15 | 41,990,400 | 0.114312 | 0.108020 | 22,450 | 79,024 | 96,000 | 1920 | 9,741,504,000 | 194,830,080,000,000 |
-| 6 | 17 | 251,942,400 | 0.021592 | 0.021361 | 28,850 | 101,552 | 108,800 | 2176 | 14,187,737,600 | 283,754,752,000,000 |
-| 6 | 19 | 1,511,654,400 | 0.004022 | 0.004014 | 36,050 | 126,896 | 121,600 | 2432 | 19,814,233,600 | 396,284,672,000,000 |
-| 6 | 21 | 9,069,926,400 | 0.000741 | 0.000741 | 44,050 | 155,056 | 134,400 | 2688 | 26,759,846,400 | 535,196,928,000,000 |
+| 4 | 11 | 102,400 | 6.875000 | 0.998967 | 12,050 | 42,416 | 70,400 | 1408 | 3,834,406,400 | 76,688,128,000,000 |
+| 4 | 13 | 409,600 | 2.031250 | 0.868829 | 16,850 | 59,312 | 83,200 | 1664 | 6,336,678,400 | 126,733,568,000,000 |
+| 4 | 15 | 1,638,400 | 0.585938 | 0.443416 | 22,450 | 79,024 | 96,000 | 1920 | 9,741,504,000 | 194,830,080,000,000 |
+| 4 | 17 | 6,553,600 | 0.166016 | 0.152967 | 28,850 | 101,552 | 108,800 | 2176 | 14,187,737,600 | 283,754,752,000,000 |
+| 4 | 19 | 26,214,400 | 0.046387 | 0.045327 | 36,050 | 126,896 | 121,600 | 2432 | 19,814,233,600 | 396,284,672,000,000 |
+| 4 | 21 | 104,857,600 | 0.012817 | 0.012736 | 44,050 | 155,056 | 134,400 | 2688 | 26,759,846,400 | 535,196,928,000,000 |
+| 4 | 23 | 419,430,400 | 0.003510 | 0.003503 | 52,850 | 186,032 | 147,200 | 2944 | 35,163,430,400 | 703,268,608,000,000 |
+| 4 | 25 | 1,677,721,600 | 0.000954 | 0.000953 | 62,450 | 219,824 | 160,000 | 3200 | 45,163,840,000 | 903,276,800,000,000 |
+| 6 | 7 | 32,400 | 13.827160 | 0.999999 | 4,850 | 17,072 | 44,800 | 896 | 982,105,600 | 19,642,112,000,000 |
+| 6 | 9 | 194,400 | 2.962963 | 0.948334 | 8,050 | 28,336 | 57,600 | 1152 | 2,095,833,600 | 41,916,672,000,000 |
+| 6 | 11 | 1,166,400 | 0.603567 | 0.453142 | 12,050 | 42,416 | 70,400 | 1408 | 3,834,406,400 | 76,688,128,000,000 |
+| 6 | 13 | 6,998,400 | 0.118884 | 0.112089 | 16,850 | 59,312 | 83,200 | 1664 | 6,336,678,400 | 126,733,568,000,000 |
+| 6 | 15 | 41,990,400 | 0.022862 | 0.022603 | 22,450 | 79,024 | 96,000 | 1920 | 9,741,504,000 | 194,830,080,000,000 |
+| 6 | 17 | 251,942,400 | 0.004318 | 0.004309 | 28,850 | 101,552 | 108,800 | 2176 | 14,187,737,600 | 283,754,752,000,000 |
+| 6 | 19 | 1,511,654,400 | 0.000804 | 0.000804 | 36,050 | 126,896 | 121,600 | 2432 | 19,814,233,600 | 396,284,672,000,000 |
 
 Calculation check for `Lambda=4, d=21`:
 
@@ -608,9 +669,9 @@ T_{2,\mathrm{logical}}
 ```
 
 ```math
-H=50*134400/104857600=0.0640869,
+H=10*134400/104857600=0.0128174,
 \qquad
-P_\mathrm{fail}=1-e^{-0.0640869}=0.0620765.
+P_\mathrm{err}=1-e^{-0.0128174}=0.0127357.
 ```
 
 ```math
@@ -640,9 +701,10 @@ phenomenological choice not backed by a paper in the current repo.
 
 | Assumption | Current value | Status | Literature reference or note |
 | --- | ---: | --- | --- |
-| Register exponent model | `H=n*T/T2` | Internal modeling choice | Uses independent exponential survival across register time; no paper source in current repo. |
-| Failure-probability conversion | `1-exp(-H)` | Internal modeling choice | Standard Poisson/survival conversion; no paper source in current repo. |
+| Error exponent model | `H=n_eff*T/T2` | Internal heuristic, literature motivated | Uses an observable-sensitivity factor rather than strict full-register survival; not a quoted formula from the cited papers, but motivated by local/intensive-observable robustness and observable-driven simulation-error analyses. |
+| Error-proxy conversion | `1-exp(-H)` | Internal modeling choice | Standard Poisson/survival conversion; no paper source in current repo. |
 | `n_logical` | 50 | Internal | Benchmark size. |
+| `n_eff` | 10 | Internal heuristic, literature motivated | Current observable-sensitivity default; use 4 for energy-density-only sensitivity and 50 for strict register survival. |
 | `Jt` | `20*2*pi` | Internal | Benchmark evolution angle. |
 | Full rotation time | 25 ns | Internal | Hardware-normalization choice. |
 | Lattice shape | `(5,10)` | Internal | Benchmark geometry; implies 50 sites and 85 nearest-neighbor edges. |
@@ -651,13 +713,14 @@ phenomenological choice not backed by a paper in the current repo.
 | Shot-count rule | `shots_per_basis=ceil(Var/epsilon^2)` | Standard estimator scaling | Uses independent-shot standard error `sqrt(Var/N)` for the per-basis estimator. |
 | Single-shot variance bound | `Var <= 1` | Conservative internal bound | Exact variance depends on the observable and covariance between measured terms; bounded Pauli-product samples satisfy `Var <= 1`. |
 | Target standard error | `epsilon=1e-2` | Internal precision choice | Gives 10,000 shots per basis and 20,000 total task shots for the two-basis default. |
-| Success retry overhead | disabled | Internal modeling choice | Enable only for heralded/retriable failures; the plotted x-axis remains a per-circuit register-failure exponent. |
+| Success retry overhead | disabled | Internal modeling choice | Enable only for heralded/retriable failures; the plotted x-axis remains a per-circuit error proxy. |
 | Raw space overhead | 1 | Internal | Bare analog baseline. |
 | Raw time overhead | 1 | Internal | Bare analog baseline. |
 | Raw `T_phi` sweep | 5, 10, 50 us | Internal sweep | Coherence decomposition is backed, but these values are illustrative. |
 | `1/T2 = 1/(2T1)+1/T_phi` | Formula | Backed | Gyenis et al., Sec. II, page 2, plus Eqs. (1a),(1b). |
 | Raw `T2 ~= T_phi` | Formula/regime | Backed conditionally | Follows from Gyenis et al. relation if `T_phi << 2T1`; the inequality itself is assumed for this plot. |
 | EPS space overhead | 2 | Internal | Phenomenological overhead choice. |
+| EPS time overhead | 1 by default | Internal | Set `EPSConfig.time_overhead_factor = lambda` when the EPS Hamiltonian simulation is a factor `lambda` slower; this scales EPS time cost and `H`. |
 | EPS `T2` sweep | 100, 200, 1000 us | Internal sweep | Labels show `T1=T2/2`; values are illustrative. |
 | EPS dephasing suppression | Reaches `T2=2T1` | Internal | The relaxation limit follows from the coherence relation; the EPS mechanism is not backed by a paper in the repo. |
 | Surface `T2_distance_3` | 100 us | Internal normalization | Reference baseline logical lifetime for `d=3`; this is the quantity previously abbreviated as `T3`, but it is not a separate physical `T3` process. |
@@ -687,12 +750,13 @@ phenomenological choice not backed by a paper in the current repo.
 | STAR physical qubits per patch | `2d^2` | Backed/approximate | Akahoshi et al., Sec. VI C uses approximately `2d^2` physical qubits per logical patch. |
 | STAR total rotation count | `steps*edges*2` | Internal benchmark mapping | Comes from this plot's 5-by-10 edge Hamiltonian and two rotations per edge. |
 | STAR analog-rotation clock schedule | `steps*4*2*18` STAR clocks, then `*d*t_cycle_us` | Mixed | 18-clock logical analog-rotation latency backed; one STAR clock is `d` syndrome rounds, while edge-color schedule and two rotations per edge are internal. This is not a surface-code T-gate synthesis depth. |
-| STAR equivalent `T2_limit` | `n_logical*T_arch/H_star` | Internal normalization | Recasts the literature-backed STAR operation-error exponent onto the same register-exponent convention as the other schemes. |
+| STAR equivalent `T2_limit` | `n_eff*T_arch/H_star` | Internal normalization | Recasts the literature-backed STAR operation-error exponent onto the same lifetime-metadata convention as the other schemes. |
 
 ## Literature Ledger
 
 | Topic | Paper link | Exact reference used |
 | --- | --- | --- |
+| Observable-sensitive simulation-error scaling | [Granet and Dreyer, PRX Quantum 6, 010333 (2025)](https://doi.org/10.1103/PRXQuantum.6.010333); [arXiv:2409.04254](https://arxiv.org/abs/2409.04254); [Trivedi, Rubio, and Cirac, Nature Communications 15, 6507 (2024)](https://doi.org/10.1038/s41467-024-50750-x); [Yu, Xu, and Zhao, Communications Physics 8, 340 (2025)](https://doi.org/10.1038/s42005-025-02260-5) | Supports the qualitative choice to use an observable-sensitivity proxy rather than strict full-register survival: local/intensive observables and observable-tailored product formulas can have error sensitivity that is reduced or size independent in appropriate regimes. The scalar `n_eff` used here remains an internal one-parameter proxy. |
 | Superconducting-qubit coherence decomposition | [Gyenis et al., PRX Quantum 2, 030101 (2021)](https://doi.org/10.1103/PRXQuantum.2.030101); [arXiv:2106.10296](https://arxiv.org/abs/2106.10296) | Sec. II, page 2 text defining `T1`, `T_phi`, and `T2`; Eqs. (1a),(1b) define dephasing and relaxation rates. |
 | 69-qubit analog-digital XY-magnet observables | [Andersen et al., Nature 638, 79-85 (2025)](https://doi.org/10.1038/s41586-024-08460-3); [arXiv:2405.17385](https://arxiv.org/abs/2405.17385) | Abstract/main text motivate energy density, transverse correlations, energy fluctuations, entanglement entropy, vortex correlators, vorticity, spin current, and energy transport as relevant XY-model observables. |
 | STAR architecture and rotation model | [Akahoshi et al., PRX Quantum 5, 010337 (2024)](https://doi.org/10.1103/PRXQuantum.5.010337); [arXiv:2303.13181](https://arxiv.org/abs/2303.13181) | Sec. VI B, Eq. (14), Fig. 25 for `P_L,rotation=2p/15+O(p^2)`; Table I and Eq. (18) for Clifford fit; Sec. VI C for rotation budget; Sec. V for compact block patch count; Table II/Sec. VII for 18-clock rotation latency. |
