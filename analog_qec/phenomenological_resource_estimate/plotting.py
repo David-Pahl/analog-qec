@@ -115,6 +115,7 @@ def _plot_resource_estimate_on_axis(
     _plot_eps_trace(ax, points, plot_config, y_metric)
     _plot_star_traces(ax, points, plot_config, y_metric)
     _plot_surface_code_traces(ax, points, plot_config, y_metric)
+    _plot_raw_T1_limit_lines(ax, points, plot_config, y_metric)
 
 
 def _plot_raw_trace(
@@ -161,6 +162,12 @@ def _plot_eps_trace(
     y_metric: str,
 ) -> None:
     eps_points = [point for point in points if point.scheme == "EPS"]
+    if not eps_points:
+        return
+    if any(point.metadata.get("eps_lambda_sweep") for point in eps_points):
+        _plot_eps_lambda_traces(ax, eps_points, config, y_metric)
+        return
+
     ax.plot(
         [point.H for point in eps_points],
         [_y_value(point, y_metric) for point in eps_points],
@@ -188,6 +195,77 @@ def _plot_eps_trace(
             va="bottom" if offset[1] > 0 else "top",
             fontsize=config.annotation_fontsize,
             color=config.eps_color,
+        )
+
+
+def _plot_eps_lambda_traces(
+    ax: plt.Axes,
+    eps_points: List[ComparisonPoint],
+    config: PlotConfig,
+    y_metric: str,
+) -> None:
+    T1_values = _ordered_metadata_values(eps_points, "EPS", "T1_limit")
+    lambda_label_T1 = T1_values[len(T1_values) // 2] if T1_values else None
+    legend_labeled = False
+
+    for T1_eps in T1_values:
+        curve_points = sorted(
+            [
+                point
+                for point in eps_points
+                if point.metadata.get("T1_limit") == T1_eps
+            ],
+            key=lambda point: point.metadata["lambda_eps"],
+        )
+        if not curve_points:
+            continue
+
+        color = _eps_color(T1_eps, config, T1_values)
+        ax.plot(
+            [point.H for point in curve_points],
+            [_y_value(point, y_metric) for point in curve_points],
+            "-",
+            color=color,
+            alpha=0.45,
+            linewidth=1.5,
+        )
+        for point in curve_points:
+            lambda_eps = point.metadata["lambda_eps"]
+            ax.plot(
+                point.H,
+                _y_value(point, y_metric),
+                config.eps_marker,
+                color=color,
+                markersize=9,
+                label="EPS" if not legend_labeled else None,
+            )
+            legend_labeled = True
+            if T1_eps == lambda_label_T1 and _annotate_eps_lambda(y_metric):
+                lambda_offset = _eps_lambda_label_offset(lambda_eps, config)
+                ax.annotate(
+                    rf"$\lambda={lambda_eps:g}$",
+                    (point.H, _y_value(point, y_metric)),
+                    textcoords="offset points",
+                    xytext=lambda_offset,
+                    ha="center",
+                    va="bottom" if lambda_offset[1] > 0 else "top",
+                    fontsize=config.annotation_fontsize,
+                    color=color,
+                    bbox=config.label_bbox,
+                )
+
+        label_point = curve_points[-1]
+        curve_offset = _eps_curve_label_offset(T1_eps, config)
+        ax.annotate(
+            label_point.label.replace("EPS ", ""),
+            (label_point.H, _y_value(label_point, y_metric)),
+            textcoords="offset points",
+            xytext=curve_offset,
+            ha="left" if curve_offset[0] >= 0 else "right",
+            va="bottom" if curve_offset[1] >= 0 else "top",
+            fontsize=config.annotation_fontsize,
+            color=color,
+            bbox=config.label_bbox,
         )
 
 
@@ -320,6 +398,60 @@ def _plot_surface_code_traces(
         )
 
 
+def _plot_raw_T1_limit_lines(
+    ax: plt.Axes,
+    points: List[ComparisonPoint],
+    config: PlotConfig,
+    y_metric: str,
+) -> None:
+    if not config.raw_T1_limit_values_us:
+        return
+
+    raw_point = next((point for point in points if point.scheme == "Raw"), None)
+    if raw_point is None:
+        return
+
+    n_error = raw_point.metadata["n_error"]
+    T_raw = raw_point.metadata.get("T_arch", raw_point.T_per_shot)
+    if T_raw is None:
+        return
+    H_crosstalk = (
+        raw_point.metadata["H_crosstalk"]
+        if config.raw_T1_limit_include_crosstalk
+        else 0.0
+    )
+
+    for line_index, T1_us in enumerate(config.raw_T1_limit_values_us):
+        H_limit = n_error * T_raw / (2 * T1_us) + H_crosstalk
+        color = _eps_color(T1_us, config, config.raw_T1_limit_values_us)
+        ax.axvline(
+            H_limit,
+            color=color,
+            linestyle=config.raw_T1_limit_line_style,
+            linewidth=config.raw_T1_limit_line_width,
+            alpha=config.raw_T1_limit_alpha,
+            label="Raw T1 limit" if line_index == 0 else None,
+            zorder=0,
+        )
+        if _annotate_raw_T1_limit(y_metric):
+            offset = _raw_T1_limit_label_offset(T1_us, config)
+            ax.annotate(
+                rf"$T_1={T1_us:g}\,\mu\mathrm{{s}}$",
+                xy=(H_limit, config.raw_T1_limit_label_y_fraction),
+                xycoords=("data", "axes fraction"),
+                textcoords="offset points",
+                xytext=offset,
+                ha="left" if offset[0] >= 0 else "right",
+                va="center",
+                fontsize=config.annotation_fontsize,
+                color=color,
+                rotation=90,
+                rotation_mode="anchor",
+                annotation_clip=True,
+                bbox=config.label_bbox,
+            )
+
+
 def _format_axes(
     fig: plt.Figure,
     ax: plt.Axes,
@@ -431,7 +563,7 @@ def _y_axis_label(y_metric: str) -> str:
     labels = {
         "space_time": "Task Space-Time Cost (qubit-s)",
         "space": "Space Cost (qubits)",
-        "time": "Task Time Cost (s)",
+        "time": "Time Cost (s)",
     }
     return labels[y_metric]
 
@@ -482,6 +614,65 @@ def _lambda_label_offset(
         Lambda_surface,
         config.lambda_label_offsets[Lambda_surface],
     )
+
+
+def _eps_color(
+    T1_eps: float,
+    config: PlotConfig,
+    T1_values: Optional[Iterable[float]] = None,
+):
+    if T1_eps in config.eps_colors:
+        return config.eps_colors[T1_eps]
+    if T1_values is None:
+        return config.eps_color
+
+    ordered_values = sorted({float(value) for value in T1_values})
+    if not ordered_values:
+        return config.eps_color
+    try:
+        index = next(
+            index
+            for index, value in enumerate(ordered_values)
+            if np.isclose(value, float(T1_eps), rtol=0.0, atol=1e-12)
+        )
+    except StopIteration:
+        return config.eps_color
+
+    fraction = (
+        0.45
+        if len(ordered_values) == 1
+        else 0.45 + 0.35 * index / (len(ordered_values) - 1)
+    )
+    return plt.get_cmap("BuGn")(fraction)
+
+
+def _eps_lambda_label_offset(
+    lambda_eps: float,
+    config: PlotConfig,
+) -> tuple[int, int]:
+    return config.eps_lambda_label_offsets.get(lambda_eps, (0, 8))
+
+
+def _eps_curve_label_offset(
+    T1_eps: float,
+    config: PlotConfig,
+) -> tuple[int, int]:
+    return config.eps_curve_label_offsets.get(T1_eps, (8, 8))
+
+
+def _annotate_eps_lambda(y_metric: str) -> bool:
+    return y_metric in {"space_time", "time"}
+
+
+def _raw_T1_limit_label_offset(
+    T1_us: float,
+    config: PlotConfig,
+) -> tuple[int, int]:
+    return config.raw_T1_limit_label_offsets.get(T1_us, (4, 0))
+
+
+def _annotate_raw_T1_limit(y_metric: str) -> bool:
+    return y_metric == "time"
 
 
 def _metric_ylim(

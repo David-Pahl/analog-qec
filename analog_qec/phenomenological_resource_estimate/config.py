@@ -40,7 +40,75 @@ class EPSConfig:
 
     space_overhead_factor: float = 2
     time_overhead_factor: float = 1
+    lambda_values: Tuple[float, ...] = ()
     T2_values_us: Tuple[float, ...] = (100, 200, 1_000)
+    dephasing_T_phi_us: Optional[float] = None
+    dephasing_suppression_factor: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.time_overhead_factor <= 0:
+            raise ValueError("time_overhead_factor must be positive")
+        if any(lambda_value < 0 for lambda_value in self.lambda_values):
+            raise ValueError("lambda_values must be non-negative")
+        if (
+            self.dephasing_T_phi_us is not None
+            and self.dephasing_T_phi_us <= 0
+        ):
+            raise ValueError("dephasing_T_phi_us must be positive when provided")
+        if self.dephasing_suppression_factor < 0:
+            raise ValueError("dephasing_suppression_factor must be non-negative")
+        if (
+            self.dephasing_suppression_factor > 0
+            and self.dephasing_T_phi_us is None
+        ):
+            raise ValueError(
+                "dephasing_T_phi_us must be provided when dephasing suppression "
+                "is nonzero"
+            )
+
+
+@dataclass(frozen=True)
+class CrosstalkConfig:
+    """Optional coherent-crosstalk proxy for Raw and EPS points."""
+
+    enabled: bool = False
+    static_crosstalk_ratio: float = 0.0
+    drive_induced_crosstalk_ratio_at_unit_scale: float = 0.0
+    raw_control_scale_factor: Optional[float] = None
+    eps_control_scale_factor: float = 1.0
+    eps_suppression_factor: float = 0.0
+    eps_suppression_factor_by_lambda: Dict[float, float] = field(default_factory=dict)
+    sensitivity_factor: Optional[float] = None
+
+    def __post_init__(self) -> None:
+        if self.static_crosstalk_ratio < 0:
+            raise ValueError("static_crosstalk_ratio must be non-negative")
+        if self.drive_induced_crosstalk_ratio_at_unit_scale < 0:
+            raise ValueError(
+                "drive_induced_crosstalk_ratio_at_unit_scale must be non-negative"
+            )
+        if (
+            self.raw_control_scale_factor is not None
+            and self.raw_control_scale_factor < 0
+        ):
+            raise ValueError("raw_control_scale_factor must be non-negative")
+        if self.eps_control_scale_factor < 0:
+            raise ValueError("eps_control_scale_factor must be non-negative")
+        if self.eps_suppression_factor < 0:
+            raise ValueError("eps_suppression_factor must be non-negative")
+        for lambda_value, suppression_factor in (
+            self.eps_suppression_factor_by_lambda.items()
+        ):
+            if lambda_value < 0:
+                raise ValueError(
+                    "eps_suppression_factor_by_lambda keys must be non-negative"
+                )
+            if suppression_factor < 0:
+                raise ValueError(
+                    "eps_suppression_factor_by_lambda values must be non-negative"
+                )
+        if self.sensitivity_factor is not None and self.sensitivity_factor <= 0:
+            raise ValueError("sensitivity_factor must be positive when provided")
 
 
 @dataclass(frozen=True)
@@ -139,6 +207,7 @@ class PhenomenologicalResourceEstimateConfig:
     benchmark: BenchmarkConfig = field(default_factory=BenchmarkConfig)
     raw: RawConfig = field(default_factory=RawConfig)
     eps: EPSConfig = field(default_factory=EPSConfig)
+    crosstalk: CrosstalkConfig = field(default_factory=CrosstalkConfig)
     surface: SurfaceCodeConfig = field(default_factory=SurfaceCodeConfig)
     star: STARConfig = field(default_factory=STARConfig)
     observable_task: ObservableTaskConfig = field(default_factory=ObservableTaskConfig)
@@ -167,8 +236,26 @@ class PlotConfig:
     annotation_fontsize: int = 8
     raw_color: str = "#000000"
     eps_color: str = "#04CB93"
+    eps_colors: Dict[float, str] = field(
+        default_factory=lambda: {50: "#8FE3CD", 100: "#04CB93", 500: "#008F68"}
+    )
+    raw_T1_limit_values_us: Tuple[float, ...] = ()
+    raw_T1_limit_include_crosstalk: bool = False
+    raw_T1_limit_line_style: str = ":"
+    raw_T1_limit_line_width: float = 1.2
+    raw_T1_limit_alpha: float = 0.65
+    raw_T1_limit_label_y_fraction: float = 0.5
+    raw_T1_limit_label_offsets: Dict[float, Tuple[int, int]] = field(
+        default_factory=lambda: {50: (-4, 0), 100: (-4, 0), 500: (-4, 0)}
+    )
     raw_marker: str = "^"
     eps_marker: str = "o"
+    eps_lambda_label_offsets: Dict[float, Tuple[int, int]] = field(
+        default_factory=lambda: {2: (-2, -14), 5: (0, 8), 10: (0, 8), 15: (0, 8)}
+    )
+    eps_curve_label_offsets: Dict[float, Tuple[int, int]] = field(
+        default_factory=lambda: {50: (8, 8), 100: (8, 15), 500: (8, 22)}
+    )
     surface_marker: str = "s"
     star_marker: str = "D"
     surface_colors: Dict[int, str] = field(

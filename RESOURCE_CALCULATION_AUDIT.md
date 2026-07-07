@@ -61,10 +61,11 @@ The default y-axis is the task-level space-time cost `nT` in
 physical-qubit-microseconds. The single-shot circuit values are still stored as
 `T_per_shot` and `nT_per_shot` on each `ComparisonPoint`; the plotted `T` and
 `nT` multiply those values by the configured observable-estimation shot count.
-Raw uses the analog evolution time directly. EPS uses that time multiplied by
-its configured `time_overhead_factor`, so an EPS simulation that is a factor
-`\lambda` slower has `T_EPS = \lambda T_analog`. Surface-code and STAR
-depths are first counted in QEC cycles or STAR clocks and then converted to
+Raw uses the analog evolution time directly. In the scalar EPS configuration,
+EPS uses that time multiplied by its configured `time_overhead_factor`. In the
+optional EPS lambda sweep, the plotted lambda value is the penalty parameter
+and the runtime slowdown is `1 + lambda`. Surface-code and STAR depths are
+first counted in QEC cycles or STAR clocks and then converted to
 microseconds with the QEC cycle time. In the current default configuration
 `t_cycle = 1`, interpreted as `1 us`, so the cycle-depth numbers are
 numerically equal to microseconds. If `t_cycle` is changed, Surface-code and
@@ -105,6 +106,10 @@ error proxy, not a full sampling-bias analysis.
 | --- | --- | --- |
 | Error exponent | `metrics.register_error_exponent` | `H = n_eff * T_arch / T2_limit` |
 | Error-proxy probability | `metrics.failure_probability` | `P_err = 1 - exp(-H)` |
+| Nominal coupling angular frequency | `metrics.nominal_coupling_angular_frequency` | `J_nom = 2*pi/t_2pi` |
+| Crosstalk angle | `metrics.crosstalk_angle` | `theta = epsilon * J_nom * T_arch` |
+| Twirled-envelope crosstalk error | `metrics.twirled_gaussian_envelope_error` | `p_xtalk = (1 - exp(-theta**2/2))/2` |
+| Crosstalk exponent | `metrics.crosstalk_error_exponent` | `H_xtalk = n_eff,xtalk * p_xtalk` |
 | Multiplicative overhead | `metrics.overhead` | `multiplier * value` |
 | Heralded retry multiplier | `metrics.success_retry_multiplier` | `exp(H)` |
 | Observable shots per basis | `ObservableTaskConfig.computed_shots_per_basis` | `ceil(Var/epsilon**2)` |
@@ -245,6 +250,20 @@ H_\mathrm{Raw}=n_\mathrm{eff}*0.5/T_\phi = 5/T_\phi
 \quad\text{for }n_\mathrm{eff}=10.
 ```
 
+The plotter can optionally draw vertical Raw relaxation-limit reference lines.
+These are not additional comparison points. For a chosen Raw `T1` value, the
+coherence-only reference uses the same Raw runtime but replaces the dephasing
+denominator by the relaxation-limited value `T2=2T1`:
+
+```math
+H_{\mathrm{Raw},T_1\mathrm{-limit}}
+=n_\mathrm{eff}T_\mathrm{Raw}/(2T_1).
+```
+
+By default this visual reference does not include Raw crosstalk. Set
+`raw_T1_limit_include_crosstalk=True` in the plot config to add the modeled Raw
+`H_xtalk` to the vertical-line position.
+
 | Label | `T_phi` used as `T2_limit` (us) | `H` | `P_err` | `nT_per_shot` | task `nT` | task time (s) |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | `Raw T_phi=5 us` | 5 | 1.000000 | 0.632121 | 25 | 500,000 | 0.01 |
@@ -278,32 +297,69 @@ the architecture removes or strongly suppresses pure dephasing so that the
 relaxation limit is reached, is a project-specific phenomenological assumption;
 no EPS-specific paper source is present in the current repository.
 
+The default EPS coherence model keeps this relaxation-limited convention. An
+optional residual pure-dephasing rate can be enabled with
+`EPSConfig.dephasing_T_phi_us` and `EPSConfig.dephasing_suppression_factor`.
+When enabled, the effective EPS coherence rate is
+
+```math
+\frac{1}{T_{2,\mathrm{EPS,eff}}}
+=\frac{1}{2T_1}
++s_\phi\frac{1}{T_{\phi,\mathrm{EPS\ source}}},
+```
+
+so the coherence exponent is
+
+```math
+H_{\mathrm{coh,EPS}}
+=n_\mathrm{eff}T_\mathrm{EPS}
+\left(
+\frac{1}{2T_1}
++s_\phi\frac{1}{T_{\phi,\mathrm{EPS\ source}}}
+\right).
+```
+
+Here `s_phi=0` recovers the current perfect-dephasing-suppression model, while
+`s_phi=1` means the configured source dephasing rate is unsuppressed. This is a
+rate-level suppression knob, distinct from the crosstalk angle-level
+suppression factor.
+
 EPS overhead:
 
 ```math
 T_{\mathrm{EPS,per\ shot}}
-=\lambda T_\mathrm{analog},
+=m_\mathrm{EPS}T_\mathrm{analog},
 \qquad
 nT_{\mathrm{EPS,per\ shot}}
-=(2*n_\mathrm{logical})\lambda T_\mathrm{analog}.
+=(2*n_\mathrm{logical})m_\mathrm{EPS}T_\mathrm{analog}.
 ```
 
-The current default uses `lambda = 1`, so `T_EPS,per shot = 0.5 us` and
+The scalar EPS path uses `m_EPS = EPSConfig.time_overhead_factor`; the current
+default has `m_EPS=1`, so `T_EPS,per shot = 0.5 us` and
 `nT_EPS,per shot = 50`. Setting `EPSConfig.time_overhead_factor` to another
 value scales these EPS time and space-time costs by that value.
+
+If `EPSConfig.lambda_values` is non-empty, `_add_eps_points()` interprets those
+values as penalty lambdas with `m_EPS = 1 + lambda`, rather than as direct time
+overhead factors; `lambda=0` is therefore the direct-runtime point. It
+generates one EPS point for each `(T2, lambda)` pair. The
+plotter groups these points by fixed implied `T1=T2/2`, drawing connected EPS
+curves in different shades; the markers along each curve correspond to the
+configured lambda values.
 
 The task-level plotted values multiply by `N_task=20000`:
 
 ```math
-T_{\mathrm{EPS,task}}=20000*\lambda*0.5\ \mu\mathrm{s},
+T_{\mathrm{EPS,task}}=20000*m_\mathrm{EPS}*0.5\ \mu\mathrm{s},
 \qquad
-nT_{\mathrm{EPS,task}}=20000*(2*50)*\lambda*0.5.
+nT_{\mathrm{EPS,task}}=20000*(2*50)*m_\mathrm{EPS}*0.5.
 ```
 
 EPS exponent:
 
 ```math
-H_\mathrm{EPS}=n_\mathrm{eff}\lambda*0.5/T_2=5\lambda/T_2
+H_\mathrm{EPS}=n_\mathrm{eff}m_\mathrm{EPS}*0.5/T_{2,\mathrm{EPS,eff}}
+=5m_\mathrm{EPS}/T_{2,\mathrm{EPS,eff}}
 \quad\text{for }n_\mathrm{eff}=10.
 ```
 
@@ -319,6 +375,103 @@ Calculation check for `T2=200 us`:
 H=10*0.5/200=0.025,
 \qquad P_\mathrm{err}=1-e^{-0.025}=0.024690.
 ```
+
+## Optional Raw/EPS Crosstalk Envelope
+
+Current implementation: `_crosstalk_terms()`, called by `_add_raw_points()` and
+`_add_eps_points()`. The default `CrosstalkConfig.enabled=False`, so all
+numbers in the default figure above are unchanged. When enabled, the Raw and
+EPS error exponents are decomposed as
+
+```math
+H_\mathrm{total}=H_\mathrm{coh}+H_\mathrm{xtalk},
+\qquad
+P_\mathrm{err}=1-\exp(-H_\mathrm{total}).
+```
+
+The coherence term remains the existing lifetime model: `T_phi` for Raw and
+`T2=2T1` for EPS. These lifetimes are treated as independent coherence
+parameters; they do not automatically scale with the coupling strength used for
+the intended Hamiltonian.
+
+The crosstalk strength is normalized to the nominal simulation coupling:
+
+```math
+J_\mathrm{nom}=\frac{2\pi}{t_{2\pi}},
+\qquad
+\theta_\mathrm{xtalk}
+=\epsilon_\mathrm{xtalk}J_\mathrm{nom}T_\mathrm{arch}.
+```
+
+For the current benchmark, `t_2pi=0.025 us`, `T_analog=0.5 us`, and therefore
+`J_nom*T_analog=20*2*pi`. The implementation keeps two angle contributions:
+
+```math
+\theta_\mathrm{static}
+=\epsilon_\mathrm{static}J_\mathrm{nom}T_\mathrm{arch},
+\qquad
+\theta_\mathrm{drive}
+=\epsilon_\mathrm{drive}s_\mathrm{control}J_\mathrm{nom}T_\mathrm{arch}.
+```
+
+Static crosstalk is an always-on unwanted Hamiltonian term, so shorter runtime
+reduces its accumulated angle. Drive-induced crosstalk scales with the intended
+control amplitude, so if Raw runs faster by increasing the intended coupling,
+the shorter runtime need not reduce the accumulated drive-induced angle. The
+two unresolved contributions are combined in quadrature,
+
+```math
+\theta_\mathrm{unsuppressed}
+=\sqrt{\theta_\mathrm{static}^2+\theta_\mathrm{drive}^2}.
+```
+
+For EPS, the configured suppression factor is applied at the angle level. When
+an EPS lambda sweep is enabled, `eps_suppression_factor_by_lambda` can override
+the scalar suppression factor for individual lambda values.
+
+```math
+\theta_\mathrm{EPS}
+=s_\mathrm{EPS}\theta_\mathrm{unsuppressed}.
+```
+
+The coherent angle is then converted into a monotone Pauli-twirled envelope
+proxy:
+
+```math
+p_\mathrm{xtalk}
+=\frac{1-\exp(-\theta_\mathrm{xtalk}^2/2)}{2},
+\qquad
+H_\mathrm{xtalk}
+=n_{\mathrm{eff,xtalk}}p_\mathrm{xtalk}.
+```
+
+This is the Gaussian-angle average of the Pauli-twirled error power for an
+unresolved coherent rotation. It has the small-angle limit
+`p_xtalk ~= theta^2/4`, like the exact single-Pauli twirl
+`sin^2(theta/2)`, but avoids coherent revivals at special angles. It is a
+phenomenological sensitivity proxy for unresolved Hamiltonian misspecification,
+not a microscopic simulation of a specified `ZZ`, `XX`, local-`X`, or local-`Z`
+crosstalk Hamiltonian.
+
+Sanity check for a representative fractional crosstalk strength:
+
+```math
+\epsilon=10^{-3},
+\qquad
+\theta=10^{-3}*20*2\pi=0.1257.
+```
+
+This gives
+
+```math
+p_\mathrm{xtalk}
+=\frac{1-\exp(-0.1257^2/2)}{2}
+=0.00393,
+\qquad
+H_\mathrm{xtalk}=10*0.00393=0.0393
+```
+
+for `n_eff,xtalk=10`.
 
 ## STAR Points
 
@@ -714,6 +867,13 @@ phenomenological choice not backed by a paper in the current repo.
 | Single-shot variance bound | `Var <= 1` | Conservative internal bound | Exact variance depends on the observable and covariance between measured terms; bounded Pauli-product samples satisfy `Var <= 1`. |
 | Target standard error | `epsilon=1e-2` | Internal precision choice | Gives 10,000 shots per basis and 20,000 total task shots for the two-basis default. |
 | Success retry overhead | disabled | Internal modeling choice | Enable only for heralded/retriable failures; the plotted x-axis remains a per-circuit error proxy. |
+| Raw/EPS crosstalk model | disabled by default | Internal sensitivity option | When enabled, adds `H_xtalk` to Raw/EPS only; default figure values are unchanged. |
+| Crosstalk ratio normalization | `epsilon=J_xtalk/J_nom` | Internal normalization | Uses `J_nom=2*pi/t_2pi`, so the current benchmark has `J_nom*T_analog=20*2*pi`. |
+| Static vs drive-induced crosstalk | separate angle terms | Internal proxy | Static terms are always-on and improve with shorter runtime; drive-induced terms scale with control amplitude and may not improve when Raw runs faster. |
+| Crosstalk envelope conversion | `(1-exp(-theta^2/2))/2` | Literature motivated internal proxy | Based on Pauli-twirled coherent error power averaged over unresolved Gaussian angle/sign information; avoids revivals of a known single coherent rotation. |
+| EPS crosstalk suppression | angle-level factor `s_EPS` | Internal proxy | Small-angle `H_xtalk` scales approximately as `s_EPS^2`; `s_EPS=0` removes the modeled crosstalk. |
+| EPS residual dephasing | disabled by default | Internal sensitivity option | Set `dephasing_T_phi_us` and `dephasing_suppression_factor` to add `s_phi/T_phi` to the EPS coherence rate; this is separate from crosstalk suppression. |
+| EPS lambda sweep | disabled by default | Internal visualization option | Set `EPSConfig.lambda_values` to draw fixed-`T1` EPS curves with lambda markers; sweep values are penalty lambdas with runtime multiplier `1+lambda`, and default point count/values are unchanged when it is empty. |
 | Raw space overhead | 1 | Internal | Bare analog baseline. |
 | Raw time overhead | 1 | Internal | Bare analog baseline. |
 | Raw `T_phi` sweep | 5, 10, 50 us | Internal sweep | Coherence decomposition is backed, but these values are illustrative. |
@@ -757,6 +917,10 @@ phenomenological choice not backed by a paper in the current repo.
 | Topic | Paper link | Exact reference used |
 | --- | --- | --- |
 | Observable-sensitive simulation-error scaling | [Granet and Dreyer, PRX Quantum 6, 010333 (2025)](https://doi.org/10.1103/PRXQuantum.6.010333); [arXiv:2409.04254](https://arxiv.org/abs/2409.04254); [Trivedi, Rubio, and Cirac, Nature Communications 15, 6507 (2024)](https://doi.org/10.1038/s41467-024-50750-x); [Yu, Xu, and Zhao, Communications Physics 8, 340 (2025)](https://doi.org/10.1038/s42005-025-02260-5) | Supports the qualitative choice to use an observable-sensitivity proxy rather than strict full-register survival: local/intensive observables and observable-tailored product formulas can have error sensitivity that is reduced or size independent in appropriate regimes. The scalar `n_eff` used here remains an internal one-parameter proxy. |
+| Pauli twirling and randomized compiling | [Wallman and Emerson, Phys. Rev. A 94, 052325 (2016)](https://doi.org/10.1103/PhysRevA.94.052325); [arXiv:1512.01098](https://arxiv.org/abs/1512.01098) | Supports the qualitative conversion of coherent control errors into stochastic Pauli-noise proxies under randomized/twirled descriptions. The current crosstalk envelope is an internal unresolved-angle proxy, not a claim that EPS or Raw literally perform randomized compiling. |
+| Limits of Pauli approximations for coherent errors | [Greenbaum and Dutton, Quantum Sci. Technol. 3, 015007 (2018)](https://doi.org/10.1088/2058-9565/aa9a06); [arXiv:1612.03908](https://arxiv.org/abs/1612.03908) | Motivates stating the crosstalk model as a phenomenological sensitivity proxy: coherent rotations can differ from stochastic Pauli-channel predictions when phase coherence matters. |
+| Analog-simulation observable stability | [Trivedi, Franco Rubio, and Cirac, Nature Communications 15, 6507 (2024)](https://doi.org/10.1038/s41467-024-50750-x); [arXiv:2212.04924](https://arxiv.org/abs/2212.04924) | Supports focusing on physically relevant local/intensive observables in noisy analog simulators rather than full-state fidelity alone. |
+| Analog-simulation observable sensitivity | [Poggi et al., PRX Quantum 1, 020308 (2020)](https://doi.org/10.1103/PRXQuantum.1.020308); [arXiv:2007.01901](https://arxiv.org/abs/2007.01901) | Supports the idea that different measured observables can have different sensitivity to analog-simulator imperfections; the scalar crosstalk sensitivity remains an internal proxy. |
 | Superconducting-qubit coherence decomposition | [Gyenis et al., PRX Quantum 2, 030101 (2021)](https://doi.org/10.1103/PRXQuantum.2.030101); [arXiv:2106.10296](https://arxiv.org/abs/2106.10296) | Sec. II, page 2 text defining `T1`, `T_phi`, and `T2`; Eqs. (1a),(1b) define dephasing and relaxation rates. |
 | 69-qubit analog-digital XY-magnet observables | [Andersen et al., Nature 638, 79-85 (2025)](https://doi.org/10.1038/s41586-024-08460-3); [arXiv:2405.17385](https://arxiv.org/abs/2405.17385) | Abstract/main text motivate energy density, transverse correlations, energy fluctuations, entanglement entropy, vortex correlators, vorticity, spin current, and energy transport as relevant XY-model observables. |
 | STAR architecture and rotation model | [Akahoshi et al., PRX Quantum 5, 010337 (2024)](https://doi.org/10.1103/PRXQuantum.5.010337); [arXiv:2303.13181](https://arxiv.org/abs/2303.13181) | Sec. VI B, Eq. (14), Fig. 25 for `P_L,rotation=2p/15+O(p^2)`; Table I and Eq. (18) for Clifford fit; Sec. VI C for rotation budget; Sec. V for compact block patch count; Table II/Sec. VII for 18-clock rotation latency. |

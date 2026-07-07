@@ -28,6 +28,30 @@ def success_retry_multiplier(H: float) -> float:
     return math.exp(H)
 
 
+def nominal_coupling_angular_frequency(full_rotation_time_us: float) -> float:
+    return 2 * math.pi / full_rotation_time_us
+
+
+def crosstalk_angle(
+    crosstalk_ratio: float,
+    time_us: float,
+    full_rotation_time_us: float,
+) -> float:
+    return (
+        crosstalk_ratio
+        * nominal_coupling_angular_frequency(full_rotation_time_us)
+        * time_us
+    )
+
+
+def twirled_gaussian_envelope_error(theta: float) -> float:
+    return 0.5 * (1 - math.exp(-(theta**2) / 2))
+
+
+def crosstalk_error_exponent(sensitivity_factor: float, theta: float) -> float:
+    return sensitivity_factor * twirled_gaussian_envelope_error(theta)
+
+
 def surface_code_n_memory(distance: int) -> int:
     return 2 * distance**2 - 1
 

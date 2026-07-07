@@ -12,6 +12,8 @@ from analog_qec.phenomenological_resource_estimate.config import (
     default_phenomenological_resource_estimate_config,
 )
 from analog_qec.phenomenological_resource_estimate.metrics import (
+    crosstalk_angle,
+    crosstalk_error_exponent,
     failure_probability,
     lattice_edge_count,
     overhead,
@@ -24,6 +26,7 @@ from analog_qec.phenomenological_resource_estimate.metrics import (
     surface_code_Tlogical,
     surface_code_n_memory,
     surface_code_n_overhead,
+    twirled_gaussian_envelope_error,
 )
 
 
@@ -172,6 +175,70 @@ def _error_sensitivity_qubits(
     return config.observable_task.error_sensitivity_qubits
 
 
+def _crosstalk_sensitivity_factor(
+    config: PhenomenologicalResourceEstimateConfig,
+) -> float:
+    return (
+        config.crosstalk.sensitivity_factor
+        if config.crosstalk.sensitivity_factor is not None
+        else _error_sensitivity_qubits(config)
+    )
+
+
+def _crosstalk_terms(
+    config: PhenomenologicalResourceEstimateConfig,
+    T_arch: float,
+    control_scale_factor: float,
+    eps_suppression_factor: Optional[float] = None,
+) -> Dict[str, Any]:
+    crosstalk = config.crosstalk
+    sensitivity_factor = _crosstalk_sensitivity_factor(config)
+    suppression_factor = (
+        1.0 if eps_suppression_factor is None else eps_suppression_factor
+    )
+    metadata: Dict[str, Any] = {
+        "H_crosstalk": 0.0,
+        "xtalk_theta_static_rad": 0.0,
+        "xtalk_theta_drive_rad": 0.0,
+        "xtalk_theta_rad": 0.0,
+        "xtalk_p_proxy": 0.0,
+        "xtalk_static_ratio": crosstalk.static_crosstalk_ratio,
+        "xtalk_drive_ratio_at_unit_scale": (
+            crosstalk.drive_induced_crosstalk_ratio_at_unit_scale
+        ),
+        "xtalk_sensitivity_factor": sensitivity_factor,
+        "xtalk_eps_suppression_factor": eps_suppression_factor or 0.0,
+        "xtalk_model": "disabled",
+    }
+    if not crosstalk.enabled:
+        return metadata
+
+    theta_static = crosstalk_angle(
+        crosstalk.static_crosstalk_ratio,
+        T_arch,
+        config.benchmark.full_rotation_time_us,
+    )
+    theta_drive = crosstalk_angle(
+        crosstalk.drive_induced_crosstalk_ratio_at_unit_scale
+        * control_scale_factor,
+        T_arch,
+        config.benchmark.full_rotation_time_us,
+    )
+    theta_total = suppression_factor * math.hypot(theta_static, theta_drive)
+    p_xtalk = twirled_gaussian_envelope_error(theta_total)
+    H_crosstalk = crosstalk_error_exponent(sensitivity_factor, theta_total)
+
+    metadata.update(
+        H_crosstalk=H_crosstalk,
+        xtalk_theta_static_rad=suppression_factor * theta_static,
+        xtalk_theta_drive_rad=suppression_factor * theta_drive,
+        xtalk_theta_rad=theta_total,
+        xtalk_p_proxy=p_xtalk,
+        xtalk_model="twirled Gaussian angle envelope",
+    )
+    return metadata
+
+
 def _add_raw_points(
     points: List[ComparisonPoint],
     config: PhenomenologicalResourceEstimateConfig,
@@ -182,13 +249,24 @@ def _add_raw_points(
     n_error = _error_sensitivity_qubits(config)
     n_raw = overhead(raw.space_overhead_factor, benchmark.n_logical)
     T_raw = overhead(raw.time_overhead_factor, comparison_T)
+    raw_control_scale_factor = (
+        config.crosstalk.raw_control_scale_factor
+        if config.crosstalk.raw_control_scale_factor is not None
+        else 1 / raw.time_overhead_factor
+    )
+    crosstalk_metadata = _crosstalk_terms(
+        config,
+        T_raw,
+        raw_control_scale_factor,
+    )
 
     for T_phi_raw in raw.T_phi_values_us:
-        H_raw = register_error_exponent(
+        H_coherence = register_error_exponent(
             n_error,
             T_raw,
             T_phi_raw,
         )
+        H_raw = H_coherence + crosstalk_metadata["H_crosstalk"]
         points.append(
             _comparison_point(
                 "Raw",
@@ -200,6 +278,11 @@ def _add_raw_points(
                 n_logical=benchmark.n_logical,
                 n_error=n_error,
                 error_exponent_model="observable lifetime sensitivity",
+                H_coherence=H_coherence,
+                raw_control_scale_factor=raw_control_scale_factor,
+                T_arch=T_raw,
+                T_arch_units="us",
+                **crosstalk_metadata,
             )
         )
 
@@ -213,29 +296,115 @@ def _add_eps_points(
     benchmark = config.benchmark
     n_error = _error_sensitivity_qubits(config)
     n_eps = overhead(eps.space_overhead_factor, benchmark.n_logical)
-    T_eps = overhead(eps.time_overhead_factor, comparison_T)
+    lambda_values = eps.lambda_values or (eps.time_overhead_factor,)
+    lambda_sweep_enabled = bool(eps.lambda_values)
 
     for T2_eps in eps.T2_values_us:
-        H_eps = register_error_exponent(n_error, T_eps, T2_eps)
-        points.append(
-            _comparison_point(
-                "EPS",
-                f"EPS T1={T2_eps / 2:g}us",
-                H_eps,
-                n_eps,
-                T_eps,
-                config.observable_task,
-                n_logical=benchmark.n_logical,
-                n_error=n_error,
-                error_exponent_model="observable lifetime sensitivity",
-                space_overhead_factor=eps.space_overhead_factor,
-                time_overhead_factor=eps.time_overhead_factor,
-                T_arch=T_eps,
-                T_arch_units="us",
-                T2_limit=T2_eps,
-                T2_limit_units="us",
+        T1_eps = T2_eps / 2
+        label = f"EPS T1={T1_eps:g}us"
+        group = label if lambda_sweep_enabled else "EPS"
+        for lambda_eps in lambda_values:
+            time_overhead_factor = (
+                1 + lambda_eps if lambda_sweep_enabled else lambda_eps
             )
-        )
+            T_eps = overhead(time_overhead_factor, comparison_T)
+            eps_suppression_factor = _eps_crosstalk_suppression_factor(
+                config,
+                lambda_eps,
+            )
+            crosstalk_metadata = _crosstalk_terms(
+                config,
+                T_eps,
+                config.crosstalk.eps_control_scale_factor,
+                eps_suppression_factor,
+            )
+            coherence_metadata = _eps_coherence_terms(
+                config,
+                n_error,
+                T_eps,
+                T2_eps,
+            )
+            H_coherence = coherence_metadata["H_coherence"]
+            H_eps = H_coherence + crosstalk_metadata["H_crosstalk"]
+            points.append(
+                _comparison_point(
+                    "EPS",
+                    label,
+                    H_eps,
+                    n_eps,
+                    T_eps,
+                    config.observable_task,
+                    group=group,
+                    n_logical=benchmark.n_logical,
+                    n_error=n_error,
+                    error_exponent_model="observable lifetime sensitivity",
+                    space_overhead_factor=eps.space_overhead_factor,
+                    time_overhead_factor=time_overhead_factor,
+                    lambda_eps=lambda_eps,
+                    eps_time_overhead_factor=time_overhead_factor,
+                    eps_lambda_time_overhead_offset=(1 if lambda_sweep_enabled else 0),
+                    eps_lambda_sweep=lambda_sweep_enabled,
+                    eps_control_scale_factor=(
+                        config.crosstalk.eps_control_scale_factor
+                    ),
+                    T_arch=T_eps,
+                    T_arch_units="us",
+                    T1_limit=T1_eps,
+                    T1_limit_units="us",
+                    T2_limit_units="us",
+                    **coherence_metadata,
+                    **crosstalk_metadata,
+                )
+            )
+
+
+def _eps_crosstalk_suppression_factor(
+    config: PhenomenologicalResourceEstimateConfig,
+    lambda_eps: float,
+) -> float:
+    suppression_by_lambda = config.crosstalk.eps_suppression_factor_by_lambda
+    if lambda_eps in suppression_by_lambda:
+        return suppression_by_lambda[lambda_eps]
+    for configured_lambda, suppression_factor in suppression_by_lambda.items():
+        if math.isclose(configured_lambda, lambda_eps, rel_tol=0.0, abs_tol=1e-12):
+            return suppression_factor
+    return config.crosstalk.eps_suppression_factor
+
+
+def _eps_coherence_terms(
+    config: PhenomenologicalResourceEstimateConfig,
+    n_error: float,
+    T_arch: float,
+    T2_relaxation_limit: float,
+) -> Dict[str, Any]:
+    eps = config.eps
+    relaxation_rate = 1 / T2_relaxation_limit
+    dephasing_rate = 0.0
+    dephasing_model = "disabled"
+
+    if eps.dephasing_T_phi_us is not None and eps.dephasing_suppression_factor > 0:
+        dephasing_rate = eps.dephasing_suppression_factor / eps.dephasing_T_phi_us
+        dephasing_model = "suppressed pure-dephasing rate"
+
+    total_rate = relaxation_rate + dephasing_rate
+    T2_effective_limit = 1 / total_rate
+    H_relaxation = n_error * T_arch * relaxation_rate
+    H_dephasing = n_error * T_arch * dephasing_rate
+    H_coherence = H_relaxation + H_dephasing
+
+    return {
+        "H_coherence": H_coherence,
+        "H_relaxation": H_relaxation,
+        "H_dephasing": H_dephasing,
+        "T2_limit": T2_effective_limit,
+        "T2_effective_limit": T2_effective_limit,
+        "T2_relaxation_limit": T2_relaxation_limit,
+        "eps_dephasing_T_phi_us": eps.dephasing_T_phi_us,
+        "eps_dephasing_suppression_factor": eps.dephasing_suppression_factor,
+        "eps_dephasing_rate_per_us": dephasing_rate,
+        "eps_relaxation_rate_per_us": relaxation_rate,
+        "eps_coherence_model": dephasing_model,
+    }
 
 
 def _add_star_points(
