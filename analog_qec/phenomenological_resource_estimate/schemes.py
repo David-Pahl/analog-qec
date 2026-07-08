@@ -299,9 +299,16 @@ def _add_eps_points(
     lambda_values = eps.lambda_values or (eps.time_overhead_factor,)
     lambda_sweep_enabled = bool(eps.lambda_values)
 
-    for T2_eps in eps.T2_values_us:
+    include_dephasing_T_phi_in_label = _eps_include_dephasing_T_phi_in_label(config)
+
+    for T2_index, T2_eps in enumerate(eps.T2_values_us):
         T1_eps = T2_eps / 2
-        label = f"EPS T1={T1_eps:g}us"
+        dephasing_T_phi_us = _eps_dephasing_T_phi_us(config, T2_index)
+        label = _eps_label(
+            T1_eps,
+            dephasing_T_phi_us,
+            include_dephasing_T_phi_in_label,
+        )
         group = label if lambda_sweep_enabled else "EPS"
         for lambda_eps in lambda_values:
             time_overhead_factor = (
@@ -323,6 +330,8 @@ def _add_eps_points(
                 n_error,
                 T_eps,
                 T2_eps,
+                dephasing_T_phi_us,
+                _eps_dephasing_suppression_factor(config, lambda_eps),
             )
             H_coherence = coherence_metadata["H_coherence"]
             H_eps = H_coherence + crosstalk_metadata["H_crosstalk"]
@@ -371,19 +380,67 @@ def _eps_crosstalk_suppression_factor(
     return config.crosstalk.eps_suppression_factor
 
 
+def _eps_dephasing_suppression_factor(
+    config: PhenomenologicalResourceEstimateConfig,
+    lambda_eps: float,
+) -> float:
+    suppression_by_lambda = config.eps.dephasing_suppression_factor_by_lambda
+    if lambda_eps in suppression_by_lambda:
+        return suppression_by_lambda[lambda_eps]
+    for configured_lambda, suppression_factor in suppression_by_lambda.items():
+        if math.isclose(configured_lambda, lambda_eps, rel_tol=0.0, abs_tol=1e-12):
+            return suppression_factor
+    return config.eps.dephasing_suppression_factor
+
+
+def _eps_dephasing_T_phi_us(
+    config: PhenomenologicalResourceEstimateConfig,
+    T2_index: int,
+) -> Optional[float]:
+    dephasing_T_phi_us = config.eps.dephasing_T_phi_us
+    if dephasing_T_phi_us is None:
+        return None
+    if isinstance(dephasing_T_phi_us, (list, tuple)):
+        if len(dephasing_T_phi_us) == 1:
+            return float(dephasing_T_phi_us[0])
+        return float(dephasing_T_phi_us[T2_index])
+    return float(dephasing_T_phi_us)
+
+
+def _eps_include_dephasing_T_phi_in_label(
+    config: PhenomenologicalResourceEstimateConfig,
+) -> bool:
+    dephasing_T_phi_us = config.eps.dephasing_T_phi_us
+    if not isinstance(dephasing_T_phi_us, (list, tuple)):
+        return False
+    return len({float(T_phi_us) for T_phi_us in dephasing_T_phi_us}) > 1
+
+
+def _eps_label(
+    T1_eps: float,
+    dephasing_T_phi_us: Optional[float],
+    include_dephasing_T_phi: bool,
+) -> str:
+    label = f"EPS T1={T1_eps:g}us"
+    if include_dephasing_T_phi and dephasing_T_phi_us is not None:
+        label = f"{label}, Tφ={dephasing_T_phi_us:g}us"
+    return label
+
+
 def _eps_coherence_terms(
     config: PhenomenologicalResourceEstimateConfig,
     n_error: float,
     T_arch: float,
     T2_relaxation_limit: float,
+    dephasing_T_phi_us: Optional[float],
+    dephasing_suppression_factor: float,
 ) -> Dict[str, Any]:
-    eps = config.eps
     relaxation_rate = 1 / T2_relaxation_limit
     dephasing_rate = 0.0
     dephasing_model = "disabled"
 
-    if eps.dephasing_T_phi_us is not None and eps.dephasing_suppression_factor > 0:
-        dephasing_rate = eps.dephasing_suppression_factor / eps.dephasing_T_phi_us
+    if dephasing_T_phi_us is not None and dephasing_suppression_factor > 0:
+        dephasing_rate = dephasing_suppression_factor / dephasing_T_phi_us
         dephasing_model = "suppressed pure-dephasing rate"
 
     total_rate = relaxation_rate + dephasing_rate
@@ -399,8 +456,8 @@ def _eps_coherence_terms(
         "T2_limit": T2_effective_limit,
         "T2_effective_limit": T2_effective_limit,
         "T2_relaxation_limit": T2_relaxation_limit,
-        "eps_dephasing_T_phi_us": eps.dephasing_T_phi_us,
-        "eps_dephasing_suppression_factor": eps.dephasing_suppression_factor,
+        "eps_dephasing_T_phi_us": dephasing_T_phi_us,
+        "eps_dephasing_suppression_factor": dephasing_suppression_factor,
         "eps_dephasing_rate_per_us": dephasing_rate,
         "eps_relaxation_rate_per_us": relaxation_rate,
         "eps_coherence_model": dephasing_model,

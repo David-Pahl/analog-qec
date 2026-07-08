@@ -299,7 +299,10 @@ no EPS-specific paper source is present in the current repository.
 
 The default EPS coherence model keeps this relaxation-limited convention. An
 optional residual pure-dephasing rate can be enabled with
-`EPSConfig.dephasing_T_phi_us` and `EPSConfig.dephasing_suppression_factor`.
+`EPSConfig.dephasing_T_phi_us` and either
+`EPSConfig.dephasing_suppression_factor` or
+`EPSConfig.dephasing_suppression_factor_by_lambda`. `dephasing_T_phi_us` can be
+a scalar applied to every EPS curve or a sequence aligned with `T2_values_us`.
 When enabled, the effective EPS coherence rate is
 
 ```math
@@ -320,9 +323,10 @@ H_{\mathrm{coh,EPS}}
 ```
 
 Here `s_phi=0` recovers the current perfect-dephasing-suppression model, while
-`s_phi=1` means the configured source dephasing rate is unsuppressed. This is a
-rate-level suppression knob, distinct from the crosstalk angle-level
-suppression factor.
+`s_phi=1` means the configured source dephasing rate is unsuppressed. In an EPS
+lambda sweep, `dephasing_suppression_factor_by_lambda` can override the scalar
+fallback for individual lambda values. This is a rate-level suppression knob,
+distinct from the crosstalk angle-level suppression factor.
 
 EPS overhead:
 
@@ -872,7 +876,7 @@ phenomenological choice not backed by a paper in the current repo.
 | Static vs drive-induced crosstalk | separate angle terms | Internal proxy | Static terms are always-on and improve with shorter runtime; drive-induced terms scale with control amplitude and may not improve when Raw runs faster. |
 | Crosstalk envelope conversion | `(1-exp(-theta^2/2))/2` | Literature motivated internal proxy | Based on Pauli-twirled coherent error power averaged over unresolved Gaussian angle/sign information; avoids revivals of a known single coherent rotation. |
 | EPS crosstalk suppression | angle-level factor `s_EPS` | Internal proxy | Small-angle `H_xtalk` scales approximately as `s_EPS^2`; `s_EPS=0` removes the modeled crosstalk. |
-| EPS residual dephasing | disabled by default | Internal sensitivity option | Set `dephasing_T_phi_us` and `dephasing_suppression_factor` to add `s_phi/T_phi` to the EPS coherence rate; this is separate from crosstalk suppression. |
+| EPS residual dephasing | disabled by default | Internal sensitivity option | Set scalar or `T2_values_us`-aligned `dephasing_T_phi_us` and `dephasing_suppression_factor`, or `dephasing_suppression_factor_by_lambda` for an EPS lambda sweep, to add `s_phi/T_phi` to the EPS coherence rate; this is separate from crosstalk suppression. |
 | EPS lambda sweep | disabled by default | Internal visualization option | Set `EPSConfig.lambda_values` to draw fixed-`T1` EPS curves with lambda markers; sweep values are penalty lambdas with runtime multiplier `1+lambda`, and default point count/values are unchanged when it is empty. |
 | Raw space overhead | 1 | Internal | Bare analog baseline. |
 | Raw time overhead | 1 | Internal | Bare analog baseline. |

@@ -95,7 +95,8 @@ def plot_stacked_phenomenological_resource_estimate(
             y_metric,
             show_xlabel=is_bottom_axis,
             show_xticklabels=is_bottom_axis,
-            show_legend=index == 0,
+            show_legend=is_bottom_axis,
+            legend_loc="center right",
             apply_tight_layout=False,
         )
 
@@ -142,7 +143,7 @@ def _plot_raw_trace(
             markersize=10,
             label="Raw" if point_index == 0 else None,
         )
-        raw_offset = config.raw_annotation_offsets[point.label]
+        raw_offset = config.raw_annotation_offsets.get(point.label, (10, 8))
         ax.annotate(
             point.label.replace("Raw ", ""),
             (point.H, _y_value(point, y_metric)),
@@ -185,7 +186,7 @@ def _plot_eps_trace(
             markersize=10,
             label="EPS" if point_index == 0 else None,
         )
-        offset = config.eps_annotation_offsets[point.label]
+        offset = config.eps_annotation_offsets.get(point.label, (10, 8))
         ax.annotate(
             point.label.replace("EPS ", ""),
             (point.H, _y_value(point, y_metric)),
@@ -255,7 +256,7 @@ def _plot_eps_lambda_traces(
                 )
 
         label_point = curve_points[-1]
-        curve_offset = _eps_curve_label_offset(T1_eps, config)
+        curve_offset = _eps_curve_label_offset(T1_eps, config, y_metric)
         ax.annotate(
             label_point.label.replace("EPS ", ""),
             (label_point.H, _y_value(label_point, y_metric)),
@@ -461,6 +462,7 @@ def _format_axes(
     show_xlabel: bool = True,
     show_xticklabels: bool = True,
     show_legend: bool = True,
+    legend_loc: str = "center left",
     apply_tight_layout: bool = True,
 ) -> None:
     ylim = _metric_ylim(points, config, y_metric)
@@ -484,7 +486,7 @@ def _format_axes(
         labelbottom=show_xticklabels,
     )
     if show_xlabel:
-        ax.set_xlabel(r"Error proxy probability $P_\mathrm{err}=1-e^{-H}$")
+        ax.set_xlabel(r"Phenomenological error probability $P_\mathrm{err}=1-e^{-H}$")
     else:
         ax.set_xlabel("")
     ax.set_ylabel(_y_axis_label(y_metric))
@@ -499,7 +501,7 @@ def _format_axes(
         va="center",
     )
     if show_legend:
-        ax.legend(loc="center left", frameon=True)
+        ax.legend(loc=legend_loc, frameon=True)
 
     if apply_tight_layout:
         fig.tight_layout()
@@ -656,7 +658,11 @@ def _eps_lambda_label_offset(
 def _eps_curve_label_offset(
     T1_eps: float,
     config: PlotConfig,
+    y_metric: str,
 ) -> tuple[int, int]:
+    metric_offsets = config.eps_curve_label_offsets_by_metric.get(y_metric, {})
+    if T1_eps in metric_offsets:
+        return metric_offsets[T1_eps]
     return config.eps_curve_label_offsets.get(T1_eps, (8, 8))
 
 

@@ -4,7 +4,19 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Sequence, Tuple, Union
+
+DephasingTphiConfig = Optional[Union[float, Sequence[float]]]
+
+
+def _dephasing_T_phi_values_us(
+    dephasing_T_phi_us: DephasingTphiConfig,
+) -> Optional[Tuple[float, ...]]:
+    if dephasing_T_phi_us is None:
+        return None
+    if isinstance(dephasing_T_phi_us, (list, tuple)):
+        return tuple(dephasing_T_phi_us)
+    return (dephasing_T_phi_us,)
 
 
 @dataclass(frozen=True)
@@ -42,25 +54,57 @@ class EPSConfig:
     time_overhead_factor: float = 1
     lambda_values: Tuple[float, ...] = ()
     T2_values_us: Tuple[float, ...] = (100, 200, 1_000)
-    dephasing_T_phi_us: Optional[float] = None
+    dephasing_T_phi_us: DephasingTphiConfig = None
     dephasing_suppression_factor: float = 0.0
+    dephasing_suppression_factor_by_lambda: Dict[float, float] = field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         if self.time_overhead_factor <= 0:
             raise ValueError("time_overhead_factor must be positive")
         if any(lambda_value < 0 for lambda_value in self.lambda_values):
             raise ValueError("lambda_values must be non-negative")
-        if (
-            self.dephasing_T_phi_us is not None
-            and self.dephasing_T_phi_us <= 0
-        ):
-            raise ValueError("dephasing_T_phi_us must be positive when provided")
+        dephasing_T_phi_values_us = _dephasing_T_phi_values_us(
+            self.dephasing_T_phi_us
+        )
+        if dephasing_T_phi_values_us is not None:
+            if len(dephasing_T_phi_values_us) == 0:
+                raise ValueError(
+                    "dephasing_T_phi_us must be non-empty when provided as a "
+                    "sequence"
+                )
+            if any(T_phi_us <= 0 for T_phi_us in dephasing_T_phi_values_us):
+                raise ValueError("dephasing_T_phi_us must be positive when provided")
+            if len(dephasing_T_phi_values_us) not in (1, len(self.T2_values_us)):
+                raise ValueError(
+                    "dephasing_T_phi_us must be a scalar, a length-1 sequence, "
+                    "or a sequence matching T2_values_us"
+                )
         if self.dephasing_suppression_factor < 0:
             raise ValueError("dephasing_suppression_factor must be non-negative")
+        for lambda_value, suppression_factor in (
+            self.dephasing_suppression_factor_by_lambda.items()
+        ):
+            if lambda_value < 0:
+                raise ValueError(
+                    "dephasing_suppression_factor_by_lambda keys must be "
+                    "non-negative"
+                )
+            if suppression_factor < 0:
+                raise ValueError(
+                    "dephasing_suppression_factor_by_lambda values must be "
+                    "non-negative"
+                )
         if (
             self.dephasing_suppression_factor > 0
-            and self.dephasing_T_phi_us is None
-        ):
+            or any(
+                suppression_factor > 0
+                for suppression_factor in (
+                    self.dephasing_suppression_factor_by_lambda.values()
+                )
+            )
+        ) and self.dephasing_T_phi_us is None:
             raise ValueError(
                 "dephasing_T_phi_us must be provided when dephasing suppression "
                 "is nonzero"
@@ -256,6 +300,9 @@ class PlotConfig:
     eps_curve_label_offsets: Dict[float, Tuple[int, int]] = field(
         default_factory=lambda: {50: (8, 8), 100: (8, 15), 500: (8, 22)}
     )
+    eps_curve_label_offsets_by_metric: Dict[
+        str, Dict[float, Tuple[int, int]]
+    ] = field(default_factory=lambda: {"space": {}, "time": {}})
     surface_marker: str = "s"
     star_marker: str = "D"
     surface_colors: Dict[int, str] = field(
