@@ -1,0 +1,557 @@
+\documentclass[%
+% reprint,
+10pt,tightenlines,
+%twocolumn,
+superscriptaddress,
+%onecolumn,
+%groupedaddress,
+%unsortedaddress,
+%runinaddress,
+%frontmatterverbose, 
+%preprint,
+%preprintnumbers,
+%nofootinbib,
+%nobibnotes,
+%bibnotes,
+ amsmath,amssymb,
+ aps,
+pra,
+%prb,
+%rmp,
+%prstab,
+%prstper,
+%floatfix,
+]{revtex4-2}
+\usepackage[margin=0.8in]{geometry}
+\usepackage{graphicx}% Include figure files
+\usepackage{dcolumn}% Align table columns on decimal point
+\usepackage{bm}% bold math
+%\usepackage{hyperref}% add hypertext capabilities
+%\usepackage[mathlines]{lineno}% Enable numbering of text and display math
+%\linenumbers\relax % Commence numbering lines
+\usepackage{color,xcolor}
+\usepackage[colorlinks]{hyperref}
+\usepackage{CJKutf8}
+\usepackage{amsthm}
+\usepackage{amsmath}
+% Define theorem styles
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+%\usepackage[showframe,%Uncomment any one of the following lines to test 
+%%scale=0.7, marginratio={1:1, 2:3}, ignoreall,% default settings
+%%text={7in,10in},centering,
+%%margin=1.5in,
+%%total={6.5in,8.75in}, top=1.2in, left=0.9in, includefoot,
+%%height=10in,a5paper,hmargin={3cm,0.8in},
+%]{geometry}
+\usepackage{bbm}
+\newcommand{\id}{\mathbbm{1}}
+\newcommand{\Htar}{H_{\mathrm{tar}}}
+\newcommand{\Henc}{H_{\mathrm{enc}}}
+\newcommand{\Hencfirst}{H_{\mathrm{enc}}^{(1)}}
+\newcommand{\Hencsecond}{H_{\mathrm{enc}}^{(2)}}
+\newcommand{\Hpen}{H_{\mathrm{pen}}}
+\newcommand{\Hsim}{H_{\mathrm{sim}}}
+\newcommand{\Htot}{H_{\mathrm{tot}}}
+\newcommand{\SW}{U_{\mathrm{SW}}}
+\newcommand{\Heff}{H_{\mathrm{eff}}}
+\newcommand{\Penc}{P_{\mathrm{enc}}}
+\newcommand{\Senc}{\mathcal{S}_{\mathrm{enc}}}
+\newcommand{\Szero}{\mathcal{S}_{0}}
+\newcommand{\Pzero}{P_{0}}
+\newcommand{\Deltapen}{\Delta_ {\mathrm{pen}}}
+\newcommand{\Hpert}{V}
+\newcommand{\Herr}{W}
+\newcommand{\ket}[1]{\left| #1 \right\rangle}
+\newcommand{\bra}[1]{\left\langle #1 \right|}
+\newcommand{\sgn}{\operatorname{sgn}}
+\usepackage{makecell}
+\usepackage{enumitem}
+\usepackage{cancel}
+\usepackage{amsthm}
+\newtheorem{corollary}[theorem]{Corollary}
+
+\newcommand{\sy}[1]{\textcolor{blue}{#1}}
+
+\begin{document}
+\begin{CJK}{UTF8}{gbsn}
+
+
+
+\title{Scalable and robust quantum simulation with hardware-efficient qLDPC code}
+
+% \author{Suying Liu} 
+% \affiliation{Joint Center for Quantum Information and Computer Science, University of Maryland, College Park, Maryland 20742, USA}
+% \affiliation{Department of Computer Science, University of Maryland, College Park, USA}
+% \author{Haowei Deng} 
+% \affiliation{Joint Center for Quantum Information and Computer Science, University of Maryland, College Park, Maryland 20742, USA}
+% \affiliation{Department of Computer Science, University of Maryland, College Park, USA}
+% \author{Xiaodi Wu} 
+% \affiliation{Joint Center for Quantum Information and Computer Science, University of Maryland, College Park, Maryland 20742, USA}
+% \affiliation{Department of Computer Science, University of Maryland, College Park, USA}
+
+\date{\today}
+
+
+\begin{abstract}
+TBD
+\end{abstract}
+
+
+
+\maketitle
+\end{CJK}
+% ===================================%
+% updated version
+\section{Introduction}
+Simulating quantum many-body systems is among the most compelling applications of current quantum computers~\cite{feynman1982simulating,lloyd1996universal}. Classical algorithms become intractable for strongly correlated quantum systems because the Hilbert space dimension grows exponentially with system size, placing many fundamental problems in condensed-matter physics, quantum chemistry, and high-energy physics beyond classical reach. As envisioned by Feynman, a controllable quantum device can efficiently emulate another quantum system, enabling the study of quantum phase transitions, molecular dynamics, and lattice gauge theories~\cite{bernien2017probing-many-body-51-atom,browaeys2020many-body-phys-individually-Rydberg,bluvstein2021controlling-many-body-Rydberg}. Realizing this promise on current hardware requires an approach that is both experimentally practical and intrinsically robust to hardware imperfections.
+
+Two complementary approaches have emerged for practical quantum simulation. In \emph{analog} Hamiltonian simulation, the device evolves continuously under engineered native interactions that directly implement the target Hamiltonian \cite{georgescu2014quantum,daley2022practical}. This approach is experimentally accessible and qubit-efficient but offers no intrinsic mechanism for suppressing hardware imperfections. In particular, systematic coherent errors, such as flux-induced qubit-frequency fluctuations in superconducting circuits, accumulate throughout the evolution and often degrade device performance well \sy{before the fundamental coherence limit set by $T_1$}. In \emph{digital fault-tolerant (FT)} simulation, by contrast, the target evolution is decomposed into a sequence of logical gates, allowing quantum error correction to suppress noise to arbitrarily high accuracy \cite{lloyd1996universal,daniel-FT}. This rigor comes at a substantial cost: full fault tolerance requires enormous space and time overheads, including thousands of physical qubits per logical qubit and lengthy error-correction procedures, placing it beyond the capabilities of NISQ and early-FT hardware. These considerations motivate a fundamentally different approach: rather than correcting arbitrary errors through full fault tolerance, one can instead tailor the simulation protocol to suppress the dominant physically relevant error channels while retaining the efficiency of analog hardware.\sy{Revision: Carefully discussing the overhead of digital FT: acknowledge the progress and also the remaining gap. (one potential point: Even you have abundant resource, you may also want to do the EPS.)} 
+
+\sy{People have realized the gap, and have tried different approaches to fill in the gap, e.g. STAR, bosonic code...}
+
+\sy{mention about STAR here, borrow some motivation from STAR, then compare ours with STAR, why they are not good enough. For the cheap rotation, no protections.}
+
+We bridge this gap with \textit{Error-Protected Simulation (EPS)}, a framework that realizes target quantum dynamics within a protected subspace of an enlarged, engineered system with a co-designed hardware-efficient code. Given a target Hamiltonian $\Htar$, EPS encodes it into the codespace of a quantum error-detecting code through an encoded Hamiltonian $\Henc$, which generates the desired dynamics entirely within the codespace. A hardware-local stabilizer Hamiltonian, $H_{\mathrm{hl}}$, constructed from the code stabilizers, energetically suppresses leakage by opening a tunable spectral gap of strength $\lambda$. The resulting simulator Hamiltonian $\Hsim = \Henc + \lambda H_{\text{hl}}$, is subject in practice to $1$-local coherent perturbations $V=\sum_i\epsilon_iV_i$. \sy{define the 1-local and 2-local} Because every $1$-local error acts trivially within the codespace, these dominant perturbations are suppressed, yielding a simulation infidelity that scales quadratically as $O(1/\lambda^2)$. Consequently, the encoded dynamics remain coherent for times far exceeding those of the constituent physical qubits. Unlike conventional quantum error correction (QEC), which is designed to correct arbitrary faults, EPS is an algorithm--hardware co-designed framework that selectively suppresses the dominant $1$-local coherent errors limiting near-term quantum simulators, achieving robust simulation without the overhead of full fault tolerance.
+
+% \begin{figure}[tbh]
+%     \centering
+%     \includegraphics[width=0.8\linewidth]{figures/main_figures/figure_1_qec_v_qep.png}
+%     \caption{Caption}
+%     \label{fig:placeholder}
+% \end{figure}
+
+The effectiveness of EPS ultimately depends on the underlying code, yet not every quantum error-detecting code admits a hardware-efficient implementation. We therefore distill the code design into four co-design criteria, organized along two complementary axes: protecting the encoded memory and enabling the encoded simulation. Each axis combines a locality requirement with a second criterion governing scalability or expressivity. For memory protection, the stabilizers must realize a geometrically $2$-local stabilizer Hamiltonian $H_{\mathrm{hl}}$ implementable on the hardware while maintaining a constant encoding rate $k/n$ under scaling. For simulation, the encoding $\Htar\rightarrow\Henc$ must preserve geometric locality, mapping single- and nearest-neighbor logical operators to $2$-local physical interactions, and must support universal Hamiltonian encoding using only $2$-local terms. Together, these four criteria distinguish codes suitable for scalable, hardware-efficient simulation from generic error-detecting codes. Their formal definitions are given in Sec.~\ref{sec:criteria}.
+\sy{could be shorten, high level mention and refer to the paragraph}
+
+EPS builds on the robust analog simulation framework of Ref.~\cite{cao2024robust}, which first demonstrated that quantum error-detecting codes can protect analog dynamics against coherent noise. Our advance is to make this protection simultaneously hardware-efficient and scalable. \sy{carry out the hardware-efficiency through the intro} Whereas conventional analog simulation provides no intrinsic error suppression and digital fault tolerance incurs prohibitive overhead through logical encoding and quantum error correction, EPS satisfies all four co-design criteria simultaneously, combining a geometrically $2$-local penalty Hamiltonian, a constant encoding rate, and a locality-preserving universal encoding. A detailed comparison with previous penalty-Hamiltonian and error-detecting constructions is provided in the Supplementary Material.
+
+More concretely, we construct a family of hardware-efficient quantum Low-Density Parity-Check (qLDPC) codes that meet these criteria. We first develop the $[[2n,n,2]]$ code family, whose stabilizers map to a commuting, nearest-neighbor two-local XY-chain penalty Hamiltonian, together with a long-range-coupler-free variant, the ``cut-off'' $[[2n,n-1,2]]$ family which is suited to standard grid-based chips. Building on these $1$D primitives, we introduce a modular $2$D design that assembles lattice models from encoded modules and uses second-order perturbative gadgets to preserve the protective gap, enabling robust computationally universal simulation of $2$D models. We close with a resource estimate comparing EPS against a digital QEC approach at fixed target fidelity.
+
+\section{Design criteria}\label{sec:criteria}
+For a quantum error-detecting code to yield a hardware-efficient EPS simulator, we require it to satisfy four co-design criteria, grouped by whether they protect the encoded \emph{quantum memory} or enable the encoded \emph{quantum simulation}. Each group pairs a locality condition with a second requirement.
+
+\noindent\textbf{Quantum Memory.}
+\begin{itemize}
+    \item \emph{Hardware locality.} The code stabilizers must reduce to a geometrically $2$-local penalty (hardware-local stabilizer) Hamiltonian $H_{\text{hl}}$, whose protecting eigenspace coincides with the codespace and whose terms are realizable as nearest-neighbor two-local interactions on the target chip.
+    \item \emph{High encoding rate.} The code must maintain a high, constant ratio $k/n$ of logical to physical qubits, so that the qubit overhead remains bounded as the simulated system scales.
+\end{itemize}
+
+\noindent\textbf{Quantum Simulation.}
+\begin{itemize}
+    \item \emph{Locality-preserving encoding.} The map $\Htar \rightarrow \Henc$ must preserve geometric locality: every single-qubit and nearest-neighbor two-qubit logical operator must admit a physically $2$-local implementation.
+    \item \emph{Universality.} The code must be able to encode a computationally universal Hamiltonian using only $2$-local logical terms, so that arbitrary target dynamics can be reached within the protected subspace.
+\end{itemize}
+
+
+% \section{Old Introduction}
+% \sy{The quest for practical quantum simulation is currently bifurcated into two disparate regimes. On one hand, fully analog Hamiltonian simulation offers immediate experimental accessibility and low qubit overhead but remains fundamentally limited by the accumulation of hardware-specific noise, particularly 1-local coherent errors. On the other hand, digital fault-tolerant (FT) simulation provides a rigorous pathway to error correction through gate-based decomposition. However, the overhead required for full FTQC, often cited in the thousands of physical qubits per logical qubit, remains beyond the reach of the NISQ and early-fault-tolerant eras.}
+
+% In current hardware, before reaching the fundamental limits of decoherence, the system's performance is typically dominated by systematic 1-local errors (e.g., flux-based qubit frequency fluctuation of superconducting qubits). While a full FT protocol is theoretically complete, it is not strictly necessary to achieve high-fidelity simulation if these dominant sources can be suppressed. Meanwhile, it remains unexplored whether and how with the current device's capabilities quantum simulation could reach interesting results even under the noise. 
+% \sy{In contemporary hardware, the fidelity of quantum operations is often limited by systematic 1-local errors, such as flux-induced frequency fluctuations in superconducting qubits, well before reaching the fundamental $T_1$ and $T_2$ decoherence limits. While a full fault-tolerant (FT) protocol provides a theoretically complete solution to noise, its implementation is not strictly necessary for high-fidelity simulation if these dominant 1-local sources can be effectively suppressed. Furthermore, the extent to which current device capabilities can be leveraged to produce physically meaningful simulation results in the presence of noise remains a critical, yet largely unexplored, frontier. Our work addresses this gap by demonstrating how hardware-constrained processors can achieve robust simulation through optimized encoding.}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/fig1.pdf}
+    \caption{
+    \textbf{Conceptual overview of raw analog simulation, error-protected simulation (EPS), and digital QEC.}
+    Raw analog architectures encode each logical degree of freedom directly in a physical qubit and implement single- and two-qubit dynamics through continuous Hamiltonian evolution, but provide no intrinsic protection against local coherent errors.
+    EPS retains the continuous, hardware-native structure of analog simulation while encoding the target dynamics into a protected logical subspace.
+    A hardware-local penalty Hamiltonian of the form $\lambda\sum(g_x XX + g_z ZZ)$ generates a tunable energy gap, where $\lambda$ sets the overall protection strength and $g_x$ and $g_z$ determine the relative XX and ZZ interaction weights. The resulting gap suppresses dominant 1-local coherent perturbations while preserving the encoded dynamics.
+    Digital QEC instead stores logical information nonlocally in many physical qubits and uses repeated gates and measurements to discretize and correct errors.
+    This enables fault-tolerant logical operations, but arbitrary rotations and logical two-qubit gates require costly gate synthesis, ancilla qubits, and measurement rounds.
+    }
+    \label{fig:placeholder}
+\end{figure}
+
+
+% \sy{In this work, we develop \textbf{Error-protected Simulation (EPS)} as a Third Path toward hardware-efficient quantum simulation in the NISQ and early fault-tolerant eras. Unlike traditional quantum error correction (QEC), which targets a broad spectrum of stochastic errors, our approach is optimized to suppress the dominant 1-local noise sources that typically precede $T_1$ and $T_2$ limits in modern superconducting processors. Specifically, we utilize hardware-efficient quantum Low-Density Parity-Check (qLDPC) codes to encode target dynamics, providing continuous error suppression during the system's evolution. By engineering a hardware-local stabilizer Hamiltonian ($H_{\text{hl}}$) from code stabilizers and a logical Hamiltonian ($H_L$) for the target physics, we induce a spectral gap that penalizes transitions out of the logical subspace. This construction saturates the limits of two-local, geometrically local chip designs. We demonstrate a quadratic suppression ($1/\lambda^2$) of errors within the 1D code modules, where $\lambda$ is the penalty strength, effectively providing a buffer that allows the simulated physics to remain coherent significantly longer than the constituent physical qubits. Building upon the 1D primitives, we further extend this framework to two dimensions using a modular-based 2D structure. This approach allows for the simulation of diverse lattice models across various geometric layouts while maintaining hardware compatibility. By leveraging second-order perturbation theory and optimized perturbative gadgets, we preserve the protective spectral gap, ensuring robust simulation of 2D TFIM and XY models. This modularity ensures that the code can scale according to the chip's capacity.}
+
+\section{Result}
+
+\subsection{Code Construction: Hardware-efficient qLDPC code}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/main_figures/figure_2_1d_surface_code.pdf}
+    \caption{\sy{We should also just introduce the [[2n,n,2]] code with enough punch to be interesting to the QEC community.} \textbf{Construction of the hardware-efficient $[[2n,n,2]]$ qLDPC code for error-protected simulation (EPS).} \textbf{a} The stabilizer Hamiltonian $H_{\mathrm{stab}}$ consists of alternating weight-four $X$- and $Z$-stabilizer plaquettes defining the $[[2n,n,2]]$ code family. \textbf{b} The stabilizer Hamiltonian is mapped onto a commuting hardware-local Hamiltonian $H_{\mathrm{hl}}$ composed exclusively of nearest-neighbor two-qubit interactions. These couplings generate an energy gap separating the codespace from its complement, suppressing dominant single-qubit coherent errors. \textbf{c} Logical single-qubit operators and nearest-neighbor logical interactions are realized using only nearest-neighbor (NN) and next-nearest-neighbor (NNN) physical couplings, providing a locality-preserving encoding of the target XY Hamiltonian $H_{\mathrm{tar}}$. \textbf{d} The complete hardware connectivity required for EPS is given by the union of the stabilizer Hamiltonian $H_{\mathrm{hl}}$ and the encoded target Hamiltonian $H_{\mathrm{tar}}$. The left example realizes a periodic four-logical-qubit XY chain using the $[[8,4,2]]$ code, while removing the boundary couplings yields the planar $[[8,3,2]]$ construction shown on the right. The latter implementation requires only NN and NNN couplers, demonstrating that EPS satisfies the hardware-locality criterion using only geometrically local, constant-weight interactions.}    
+    \label{fig:code-construction}
+\end{figure}
+
+\sy{change the example to 8 physical qubits} To introduce co-design of the Error-protected Simulation (EPS) framework and hardware-efficient qLDPC code, we first establish a concrete instance using the stabilizer formalism of a $[[8,4,2]]$ qLDPC code. We define the generators of the stabilizer group $\mathcal{S}$ as:
+\begin{equation}
+    \mathcal{S} := \{X_1 X_2 X_3 X_4, Z_3 Z_4 Z_5 Z_6, X_5X_6X_7X_8, Z_7Z_8Z_0Z_1\},
+\end{equation}an
+where each operator represents a weight-4 Pauli string acting on a 8-qubit register. A quantum state $|\psi\rangle$ is in the codespace if and only if: $S_i|\psi\rangle = |\psi\rangle \quad \forall S_i \in \mathcal{S}.$ A natural physical realization of the above constraint is provided by a stabilizer Hamiltonian, constructed as a negative sum of stabilizer generators,
+\begin{equation}
+    H_{\text{stab}} = -\sum_{S_i \in \mathcal{S}} S_i, 
+\end{equation}
+whose ground-state manifold coincides with the codespace. For $[[8,4,2]]$ code whose code distance is $2$, any $1$-local error that anticommutes with one or more stabilizers flips the corresponding stabilizer eigenvalues, thereby raising the energy and moving the state out of the ground space. Consequently, the encoded subspace is protected by the energy gap separating it from excited states. 
+
+\sy{add some math here}
+However, such stabilizer Hamiltonians generally involve high-weight interactions, motivating the construction of alternative weight-reduced stabilizer Hamiltonians that employ only two-local interaction terms. We then introduce the \textit{Hardware-local stabilizer Hamiltonian} $H_{\text{hl}}$ with only two-local interactions for the $[[8,4,2]]$ code. 
+
+
+
+
+\begin{equation}\label{eq:hardware-local H}
+    H_{\text{hl}}(\mathbf{g})=  (g_2Y_0Y_1-g_1X_0X_1)+(g_1X_2X_3-g_3Z_2Z_3)+(g_3Z_4Z_5-g_2Y_4Y_5),
+\end{equation}
+where $\mathbf{g}:=(g_1,g_2,g_3)\in \mathbb{R}^3$ is the coefficient set satisfying $g_i = q^{(i-1)}$ with constant $q$~\footnote{The choice of the coefficient set is not unique as discussed in Supplementary Material.}. This is a geometric two-local commuting Hamiltonian whose kernel matches exactly with the $[[6,3,2]]$ codespace. Similar to the stabilizer Hamiltonian, the quantum dynamics restricted to the zero-eigenspace of $H_{\text{hl}}$ are protected by the spectral gap between the codespace and its orthogonal complement. This protection can be systematically enhanced by increasing the penalty coefficient $\lambda$, effectively broadening the gap to suppress leakage into the error manifold. 
+
+Furthermore, the desired target Hamiltonian simulation should happen within the codespace of the enlarged Hilbert space. To achieve this, we encode the target Hamiltonian $\Htar$ into the codespace of the encoded Hamiltonian $\Henc$ with the following replacement.
+\begin{equation}
+    X_i \rightarrow \bar{X}_i,~~ Z_i \rightarrow \bar{Z}_i,~~ I_i \rightarrow \bar{I}_i,
+\end{equation}
+where the logical operators act on $6$ physical qubits as listed in Table.~\ref{tab:3 logical qubit case}. Notably, all the single logical operators and nearest-neighbour two-local logical operators are implemented via physically two-local interactions. 
+
+\begin{table}[htbp]
+    \centering
+    \begin{tabular}{||cc|cc|cc||}
+    \hline
+    &&&&&\\
+    $\bar{X}_1$     & $\begin{bmatrix}
+       X & *& *\\
+        X  & *& *  
+    \end{bmatrix}$ & $\bar{X}_2$& $\begin{bmatrix}
+          X & * & *\\
+        * & * & Z
+    \end{bmatrix}$ &  $\bar{X}_3$& $\begin{bmatrix}
+        * & Z  & *\\
+        *  &Z  & *
+    \end{bmatrix}$ \\
+     &&&&&\\
+          $\bar{Z}_1$     & $\begin{bmatrix}
+    * & Z & *\\
+        Y  &* & *
+    \end{bmatrix}$ & $\bar{Z}_2$& $\begin{bmatrix}
+      Y & *&* \\
+        Y  &* &*
+    \end{bmatrix}$ &  $\bar{Z}_3$& $\begin{bmatrix}
+         * & *& Y\\
+         * & X& *
+    \end{bmatrix}$  \\
+     &&&&&\\
+     \hline
+    \end{tabular}
+    \caption{Logical operators for $[[6,3,2]]$qLDPC code}
+    \label{tab:3 logical qubit case}
+\end{table}
+
+Given a target Hamiltonian $H_{\text{tar}}$, we construct the encoded error-protected Hamiltonian $H_{\text{EP}}$ using the $[[6,3,2]]$ code as:
+\begin{equation}
+H_{\text{EP}} = H_{\text{enc}} + \lambda H_{\text{hl}},
+\end{equation}
+where $H_{\text{enc}}$ is the encoded operator that drives the target dynamics within the codespace, and $\lambda H_{\text{hl}}$ is the penalty term that establishes an energy gap to suppress transitions out of that space. In a realistic experimental setting, this Hamiltonian is inevitably perturbed by environmental noise. Specifically, flux-induced frequency fluctuations in superconducting qubits introduce coherent 1-local errors, resulting in the effective simulator Hamiltonian:
+\begin{equation}
+H_{\text{sim}} = H_{\text{EP}} + \sum_i \epsilon_i V_i,
+\end{equation}
+where $V_i$ represents a 1-local physical operator acting on the $i$-th qubit and $\epsilon_i$ denotes the local noise strength. By projecting the dynamics onto the code’s logical manifold, $H_{\text{EP}}$ acts as a filter against these perturbations. Consequently, the infidelity between the noisy evolution under $H_{\text{sim}}$ and the ideal target dynamics is quadratically suppressed, scaling as $O(1/\lambda^2)$.
+
+The above design can be extended to a code family following the same pattern, which we refer to as $[[2n,n,2]]$ qLDPC code. The stabilizer generators are
+\begin{align}
+    S = \begin{cases}
+        \{X_{4i}X_{4i+1}X_{4i+2}X_{4i+3}\}_{i = 0,1,\cdots,\frac{n-3}{2}},\{Z_{4i+2}Z_{4i+3}Z_{4i+4}Z_{4i+5}\}_{i = 0,1,\cdots,\frac{n-3}{2}},Y_0Y_1Y_{2n-2}Y_{2n-1} ~~ \text{if}~n~\text{is odd};\\
+        \{X_{4i}X_{4i+1}X_{4i+2}X_{4i+3}\}_{i = 0,1,\cdots,\frac{n-2}{2}},\{Z_{4i+2}Z_{4i+3}Z_{4i+4}Z_{4i+5}\}_{i = 0,1,\cdots,\frac{n-4}{2}},Z_0Z_1Z_{2n-2}Z_{2n-1}~~\text{if}~n~\text{is even}.
+    \end{cases}
+\end{align}
+The corresponding Hardware-local stabilizer Hamiltonian becomes
+\begin{equation}\label{eqn:2nn2_code}
+\begin{aligned}
+H_{\text{hl}} = \begin{cases} 
+    \left. \begin{aligned} 
+        &2^n (Y_0 Y_1 - Y_{2n-2} Y_{2n-1}) + \sum_{i=0}^{\frac{n-3}{2}} 2^i (X_{4i} X_{4i+1} - X_{4i+2} X_{4i+3}) \\
+        &+ \sum_{i=0}^{\frac{n-3}{2}} 2^{i + \frac{n-1}{2}} (Z_{4i+2} Z_{4i+3} - Z_{4i+4} Z_{4i+5})
+    \end{aligned} \right\} & \text{if } n \text{ is odd;} \\[20pt]
+    \left. \begin{aligned} 
+        &2^n (Z_0 Z_1 - Z_{2n-2} Z_{2n-1}) + \sum_{i=0}^{\frac{n-2}{2}} 2^i (X_{4i} X_{4i+1} - X_{4i+2} X_{4i+3}) \\
+        &+ \sum_{i=0}^{\frac{n-4}{2}} 2^{i + \frac{n}{2}} (Z_{4i+2} Z_{4i+3} - Z_{4i+4} Z_{4i+5})
+    \end{aligned} \right\} & \text{if } n \text{ is even.}
+\end{cases}
+\end{aligned}
+\end{equation}
+To implement Error-protected Simulation (EPS) using the $[[2n, n, 2]]$ qLDPC code family, we need engineer this hardware-local stabilizer Hamiltonian. Fortunately, this construction is highly hardware-compatible, as it manifests as an extended XY-chain comprising commuting nearest-neighbor, two-local terms as defined in Eq.~\eqref{eqn:2nn2_code}. Besides, we also need to replace the physical terms in our simulation target with the logical operators for the $[[2n, n, 2]]$ qLDPC code family as listed below.
+
+Case 1: $n$ is even$$\begin{aligned}
+\text{For } n \text{ even:} \\
+&\begin{aligned}
+    &\bar{X}_1 = X_{0}X_1, && \bar{Z}_1 = Z_2Z_1 \\
+    &\bar{X}_2 = X_0X_{2n-1}, && \bar{Z}_2 = Z_0Z_1 
+\end{aligned} \\[8pt]
+&\forall k \in \{1,\dots,\tfrac{n}{2}-1\}: \\
+&\begin{cases}
+    \bar{X}_{2k+1} = X_{2n-4k}X_{2n-4k+1}, & \bar{Z}_{2k+1} = Z_{2n-4k+2}Z_{2n-4k+1} \\
+    \bar{X}_{2k+2} = X_{2n-4k}X_{2n-4k-1}, & \bar{Z}_{2k+2} = Z_{2n-4k-2}Z_{2n-4k-1}
+\end{cases}
+\end{aligned}$$Case 2: $n$ is odd$$\begin{aligned}
+\text{For } n \text{ odd:} \\
+&\begin{aligned}
+    &\bar{X}_1 = X_0X_1, && \bar{Z}_1 = Z_2Y_1 \\
+    &\bar{X}_2 = X_0Z_{2n-2}, && \bar{Z}_2 = Y_0Y_1 \\
+    &\bar{X}_3 = Z_{2n-4}Z_{2n-3}, && \bar{Z}_3 = X_{2n-3}Y_{2n-2}
+\end{aligned} \\[8pt]
+&\forall k \in \{2,\dots,\tfrac{n-1}{2}\}: \\
+&\begin{cases}
+    \bar{X}_{2k} = X_{2n-4k+2}X_{2n-4k+3}, & \bar{Z}_{2k} = Z_{2n-4k+4}Z_{2n-4k+3} \\
+    \bar{X}_{2k+1} = X_{2n-4k+2}X_{2n-4k+1}, & \bar{Z}_{2k+1} = Z_{2n-4k}Z_{2n-4k+1}
+\end{cases}
+\end{aligned}$$
+Notably, the logical operators for the code family still retain the good property from the $[[6,3,2]]$ instance: all the single-qubit or nearest-neighbor two-qubit logical operators are realizable via physically two-local interactions. 
+
+\subsection{Logical construction: Modular 2D design}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=1\linewidth]{figures/main_figures/figure_3_2d_perturbation_gadget_v2.pdf}
+    \caption{\textbf{Modular construction of two-dimensional error-protected simulators through module growth and module stitching.} \textbf{a} One-dimensional logical modules are extended by repeating the stabilizer and connectivity pattern along the horizontal direction. The logical connectivity (top) and corresponding physical implementation (bottom) grow simultaneously while preserving the local coupling structure. \textbf{b} Neighboring modules are connected using perturbative gadgets, whose optimized physical couplers are shown in yellow. Nearest-neighbor (NN) logical connectivity requires only up to next-nearest-neighbor (NNN) physical couplers, while longer-range logical interactions can be realized using additional physical couplers. \textbf{c} Perturbative gadgets can be also used to engineer beyond-NN logical connectivity. Here, a logical NNN interaction is realized using beyond-NNN physical couplers. Together, module growth and module stitching provide a scalable, modular framework for constructing two-dimensional hardware-efficient error-protected simulators.}
+    \label{fig:placeholder}
+\end{figure}
+
+\begin{itemize}
+    \item verify current square lattice connectivity
+    \item figure b currently is missing one column of logical qubits
+    \item add second row with triangular logical connectivity
+\end{itemize}
+
+\begin{table}[h!]
+\centering
+\caption{Comparison of simulation paradigms across hardware-efficiency and robustness metrics.}
+\label{tab:code_comparison}
+\begin{tabular}{l|ccc}
+\hline \hline
+\textbf{Metric} & \textbf{Raw Analog} & \textbf{Digital QEC} & \textbf{EPS with qLDPC code (This Work)} \\ \hline
+Encoding Rate ($k/n$) & 1 (Maximum) & $\to 0$ (Low) & \textbf{Constant (High)} \\
+Locality & 2-local & Non-local gates & \textbf{2-local} \\
+Geometric Locality & 2-local & Non-local gates & \textbf{next-nearest 2-local} \\
+Stabilizer Weight & N/A & High (Weight 4+) & \textbf{Constant (Weight 2)} \\
+System Structure & Fixed & Monolithic & \textbf{Modular} \\
+Error Suppression & None & Full Fault-Tolerance & \textbf{Quadratic ($1/\lambda^2$)} \\
+Hardware Overhead & Minimal & Prohibitive & \textbf{Low/Efficient} \\ \hline \hline
+\end{tabular}
+\end{table}
+
+\subsection{Performance comparison: Resource estimation}
+
+\begin{figure}[tbh]
+    \centering
+    \includegraphics[width=0.5\linewidth]{figures/main_figures/figure_5_resource_estimation.pdf}
+    \caption{\textbf{Phenomenological resource-error comparison for a fixed analog benchmark.} \textbf{a} Physical-qubit cost and \textbf{b} total task time plotted against the cumulative observable-error proxy $P_{\mathrm{fail}}=1-e^{-H}$. The benchmark is a $50$-logical-spin XY evolution on a $5\times 10$ lattice to $Jt=20(2\pi)$, corresponding to a $0.5~\mu{\rm s}$ analog circuit, followed by estimation of energy density and radial transverse correlations. Raw analog points are unencoded evolutions labeled by dephasing time $T_\phi$; EPS points use the protected analog encoding with small space-time overhead; surface-code traces show distance and logical-suppression sweeps including QEC-cycle and factory costs; and STAR points use the injected-rotation and logical-Clifford error model, grouped by physical error rate. Points toward the lower left require fewer resources and have lower error. Full calculation details are given in Appendix~\ref{sm:resource_estimation}.}
+    \label{fig:resource_estimation}
+\end{figure}
+
+Figure~\ref{fig:resource_estimation} compares the resources needed to estimate a fixed set of observables after an analog XY evolution: final energy density and radial transverse correlations on a $50$-spin, $5\times 10$ lattice. The horizontal axis is an observable-sensitive error proxy, while the two panels separately show the physical-qubit cost and the total task time after including the measurement shots required for this observable-estimation task. The mathematical definitions of the error proxy, shot model, and architecture-specific constants are given in Appendix~\ref{sm:resource_estimation}.
+
+The raw analog baseline has essentially no encoding overhead, but its error remains high because the model is dominated by physical dephasing and coherent crosstalk during the analog evolution. Surface-code simulation has the opposite behavior: increasing the code distance and logical suppression factor gives a clear monotonic improvement in error, but the Trotterized logical circuit, QEC cycles, and factory resources produce large space and time costs.
+
+STAR occupies an intermediate regime. Its error model combines injected-rotation errors with logical Clifford errors, so it can reach the same error range as surface-code simulation over part of the plot with substantially lower space cost. Its time cost remains comparable to the surface-code baseline because the Hamiltonian simulation is still Trotterized and each encoded rotation must be consumed through magic-state or rotation-injection-style operations.
+
+EPS is favorable in the low-to-intermediate error regime targeted here. Its error model is analog and protection-based: the encoded dynamics are run with a hardware-local penalty that suppresses the dominant local coherent errors, with residual dephasing and crosstalk sensitivities included in Appendix~\ref{sm:resource_estimation}. In the plotted regime, EPS improves the error proxy by up to roughly two orders of magnitude relative to raw analog simulation while adding only a small overhead in both space and time.
+
+\section{Conclusion and outlook}
+\sy{1. unprotected arbitrary rotation in STAR could be done in EPS and do the Clifford gates in FT ; 2. you don't necessarily need to decompose the clifford and non-clifford gates, but directly be simulated in a robust way; 3. put EPS as a gadgets and it could be combined with other methods}
+
+\clearpage
+\bibliography{main}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%                            SUPPLEMENTARY MATERIAL                            %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\clearpage
+\onecolumngrid
+\begin{center}
+\textbf{\large Supplementary Material}
+\end{center}
+\setcounter{section}{0}
+\setcounter{equation}{0}
+\setcounter{figure}{0}
+\setcounter{table}{0}
+\renewcommand{\theequation}{S\arabic{equation}}
+\renewcommand{\thefigure}{S\arabic{figure}}
+\renewcommand{\thetable}{S\arabic{table}}
+\renewcommand{\thesection}{S\arabic{section}}
+
+\section{Resource-estimation assumptions and calculation}\label{sm:resource_estimation}
+The resource comparison in Fig.~\ref{fig:resource_estimation} is a phenomenological, task-level estimate. The shared benchmark has
+\begin{equation}
+    n_{\mathrm{logical}}=50,\qquad
+    Jt=20(2\pi),\qquad
+    T_{\mathrm{analog}}=0.5~\mu{\rm s},
+\end{equation}
+where the last equality uses a $25~{\rm ns}$ time for a full $2\pi$ analog rotation. The plotted horizontal coordinate is the cumulative error-proxy probability
+\begin{equation}
+    P_{\mathrm{fail}}=1-e^{-H}.
+\end{equation}
+For lifetime-limited Raw, EPS, and surface-code branches, the coherence contribution is
+\begin{equation}
+    H_{\mathrm{coh}}
+    =\frac{n_{\mathrm{eff}}T_{\mathrm{arch}}}{T_{2,\mathrm{eff}}},
+\end{equation}
+where the default observable task uses $n_{\mathrm{eff}}=10$. This is an observable-sensitivity proxy for final XY energy density and radial transverse correlations, not a strict full-register survival criterion. Setting $n_{\mathrm{eff}}=50$ recovers the conservative model in which any single-qubit fault spoils the full shot.
+
+The two panels separate space and time. The space panel plots the physical-qubit count $n_{\mathrm{phys}}$. The time panel plots the task time
+\begin{equation}
+    T_{\mathrm{task}}=N_{\mathrm{task}}T_{\mathrm{arch}}.
+\end{equation}
+The default observable task estimates final XY energy density and radial transverse correlations using global $X$ and global $Y$ measurement bases. With a bounded single-shot variance and target standard error $\epsilon=10^{-2}$,
+\begin{equation}
+    N_{\mathrm{shots/basis}}
+    =\left\lceil \frac{\mathrm{Var}}{\epsilon^2}\right\rceil
+    =10^4,\qquad
+    N_{\mathrm{task}}=2\times 10^4 .
+\end{equation}
+Retry overhead for failed runs is not included.
+
+Raw analog simulation uses
+\begin{equation}
+    n_{\mathrm{phys}}=n_{\mathrm{logical}},\qquad
+    T_{\mathrm{arch}}=T_{\mathrm{analog}}.
+\end{equation}
+Its labels quote the dephasing time $T_\phi=5,10,50~\mu{\rm s}$. The coherence relation is
+\begin{equation}
+    \frac{1}{T_2}=\frac{1}{2T_1}+\frac{1}{T_\phi},
+\end{equation}
+which reduces to $T_2\simeq T_\phi$ in the dephasing-dominated limit.
+
+EPS uses
+\begin{equation}
+    n_{\mathrm{phys}}=2n_{\mathrm{logical}},\qquad
+    T_{\mathrm{EPS}}=(1+\lambda)T_{\mathrm{analog}},
+\end{equation}
+where $\lambda$ is the plotted EPS penalty parameter in the sensitivity sweep. The nominal EPS coherence limit is relaxation-limited, $T_2=2T_1$, so the EPS labels quote $T_1$. When residual pure dephasing is included, the effective EPS coherence rate is
+\begin{equation}
+    \frac{1}{T_{2,\mathrm{EPS,eff}}}
+    =\frac{1}{2T_1}
+    +s_\phi(\lambda,\Delta)\frac{1}{T_{\phi,\mathrm{source}}}.
+\end{equation}
+The current sensitivity curves use the same lambda-dependent suppression envelope for residual dephasing and coherent crosstalk,
+\begin{equation}
+    s(\lambda,\Delta)
+    =\frac{2}{3}\left[1+(\lambda\Delta)^2\right]^{-1}
+    +\frac{1}{3}(1+\lambda\Delta)^{-1},
+    \qquad
+    \Delta=50.
+\end{equation}
+Thus increasing $\lambda$ is not free: it slows EPS by the factor $1+\lambda$ and therefore increases both task time and coherence exposure, while it suppresses residual dephasing and crosstalk through the factor $s(\lambda,\Delta)$.
+
+The Raw and EPS sensitivity model also includes a coherent-crosstalk contribution,
+\begin{equation}
+    H=H_{\mathrm{coh}}+H_{\mathrm{xtalk}}.
+\end{equation}
+Crosstalk strengths are normalized to the nominal simulation coupling
+\begin{equation}
+    J_{\mathrm{nom}}=\frac{2\pi}{t_{2\pi}},
+\end{equation}
+so that a fractional static or drive-induced Hamiltonian error accumulates an angle
+\begin{equation}
+    \theta_{\mathrm{static}}
+    =\epsilon_{\mathrm{static}}J_{\mathrm{nom}}T_{\mathrm{arch}},
+    \qquad
+    \theta_{\mathrm{drive}}
+    =\epsilon_{\mathrm{drive}}c_{\mathrm{ctrl}}J_{\mathrm{nom}}T_{\mathrm{arch}}.
+\end{equation}
+The unresolved angle is combined in quadrature. For EPS, the angle-level suppression is applied before converting to the crosstalk proxy,
+\begin{equation}
+    \theta_{\mathrm{xtalk,EPS}}
+    =s_{\mathrm{xtalk}}(\lambda,\Delta)
+    \sqrt{\theta_{\mathrm{static}}^2+\theta_{\mathrm{drive}}^2}.
+\end{equation}
+The coherent angle is then mapped to a monotone Pauli-twirled envelope,
+\begin{equation}
+    p_{\mathrm{xtalk}}
+    =\frac{1-\exp(-\theta_{\mathrm{xtalk}}^2/2)}{2},
+    \qquad
+    H_{\mathrm{xtalk}}
+    =n_{\mathrm{eff,xtalk}}p_{\mathrm{xtalk}}.
+\end{equation}
+For the plotted EPS sensitivity curves, $s_{\mathrm{xtalk}}(\lambda,\Delta)=s_\phi(\lambda,\Delta)$. This term is a phenomenological sensitivity proxy for unresolved coherent Hamiltonian misspecification, not a microscopic simulation of a specified crosstalk Hamiltonian.
+
+The encoded baselines are intentionally optimistic. For the surface-code trace, the Trotterized $5\times 10$ XY benchmark has $80$ Trotter steps, $85$ nearest-neighbor edges, two Pauli rotations per edge, edge-color depth $4$, and T-depth $6400$. A distance-$d$ point uses
+\begin{equation}
+    T_{\mathrm{arch}}=6400\,d\,t_{\mathrm{cycle}},\qquad
+    t_{\mathrm{cycle}}=1~\mu{\rm s},
+\end{equation}
+and
+\begin{equation}
+    n_{\mathrm{phys}}=50(2d^2-1)+22\times 8(2d^2-1).
+\end{equation}
+The first term is memory area and the second is an optimistic factory area for the parallel T demand. The effective logical lifetime is
+\begin{equation}
+    T_{2,\mathrm{logical}}(d,\Lambda)
+    =100~\mu{\rm s}\left(\frac{\Lambda}{2}\right)^2
+    \Lambda^{(d-3)/2},
+\end{equation}
+with the plotted traces using $\Lambda=4$ and $\Lambda=6$.
+
+For STAR, the same Trotterization gives $13600$ analog rotations and $640$ parallel rotation layers. Using an $18$-clock STAR rotation latency gives $11520$ STAR clocks and
+\begin{equation}
+    T_{\mathrm{arch}}=11520\,d\,t_{\mathrm{cycle}},\qquad
+    n_{\mathrm{phys}}=(1.5n_{\mathrm{logical}}+5)2d^2 .
+\end{equation}
+The STAR error exponent combines the injected-rotation budget
+$P_{\mathrm{rot}}=2p/15$ with the fitted logical-Clifford clock error
+\begin{equation}
+    P_{\mathrm{Cliff}}(d,p)
+    =C_Z\left(\frac{p}{p_{\mathrm{th},Z}}\right)^{(d+1)/2}
+     +C_X\left(\frac{p}{p_{\mathrm{th},X}}\right)^{(d+1)/2}.
+\end{equation}
+The full STAR operation exponent is first computed from its rotation-plus-Clifford budget and then scaled by the same observable-sensitivity factor,
+\begin{equation}
+    H_{\mathrm{STAR}}
+    =\frac{n_{\mathrm{eff}}}{n_{\mathrm{logical}}}
+    \left(H_{\mathrm{rot,full}}+H_{\mathrm{Cliff,full}}\right).
+\end{equation}
+The plotted STAR sweeps use $p=5\times 10^{-5},10^{-4},5\times 10^{-4}$ and
+$d=3,5,7,9$. These estimates are not complete architecture-level resource counts: routing, scheduling, complete analog-control budgets, and heavier-observable costs are outside the model. The comparison is therefore meant to show the resource-error regime reached under transparent and deliberately favorable assumptions for the encoded baselines.
+
+\section{Comparison with existing approaches}\label{sm:comparison}
+Several approaches have been proposed to suppress noise in quantum simulators, including energy-penalty error suppression, hardware-efficient bosonic encodings, autonomous quantum error correction, and open-loop or post-processing error-mitigation techniques. However, none simultaneously achieves robust, hardware-compatible and efficient quantum simulation. We compare these approaches using the same framework that defines EPS: the four co-design criteria introduced in Sec.~\ref{sec:criteria}, together with the underlying error model and the resulting level of error suppression. Table~\ref{tab:sm_comparison} summarizes this landscape, while the discussion below contrasts EPS with each class of existing methods.
+
+\begin{table}[h!]
+\centering
+\footnotesize
+\renewcommand{\arraystretch}{1.3}
+\caption{Comparison of EPS with previous approaches across the EPS design criteria, the addressed error model, and the achievable suppression. ``Geom.\ $2$-local'' means the encoding and penalty terms are realizable as nearest- (or next-nearest-) neighbor two-body interactions on a planar chip.}
+\label{tab:sm_comparison}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{l|l|l|l|l|l|l}
+\hline \hline
+\textbf{Approach} & \textbf{Modality} & \textbf{Protection} & \textbf{Locality} & \textbf{Rate $k/n$} & \textbf{Error model} & \textbf{Suppression} \\ \hline
+Raw analog~\cite{daley2022practical} & Analog & None & --- & $1$ & --- & None \\
+Digital FT (surface)~\cite{fowler2012surface} & Digital & Active QEC & high-weight & $\to 0$ & Stochastic, correct & Full FT \\
+Digital FT (qLDPC)~\cite{tillich2014quantum,panteleev2022asymptotically,bravyi2024high} & Digital & Active QEC & Low-weight, non-geom. & Constant & Stochastic, correct & Full FT \\
+Energy gap protection~\cite{jordan2006error,bookatz2015error,marvian2017error} & Analog & Energy gap & $k$-local; $2$-local (limited model) & Varies & Coherent+stoch., suppress & $\sim 1/(\lambda^2\Delta^2) $ (with exponential closing $\Delta$) \\
+% Perturbative gadgets~\cite{kempe2006complexity,oliveira2008complexity,bravyi2008quantum} & Analog & Locality reduction only & Geom.\ $2$-local & --- & --- (no protection) & Gadget error $\sim 1/\lambda$ \\
+Bosonic codes~\cite{gottesman2001encoding,mirrahimi2014dynamically} & Bosonic & Autonomous/active QEC & Oscillator-native & Per mode & Loss/dephasing, correct & Code-dependent \\
+Autonomous QEC~\cite{lebreuilly2021autonomous,kubica2019cellular,shtanko2025bounds} & Analog & Engineered dissipation & Bath-coupling overhead & Code-dependent & Stochastic, correct & Steady-state, bounded \\
+DD / mitigation / DFS~\cite{viola1999dynamical,temme2017error,lidar1998decoherence} & Analog/circuit & Control / post-hoc / passive & --- & --- & Idling or sampling & Varies \\
+Error-detected analog~\cite{cao2024robust} & Analog & Penalty + detection & $2$-local, const.\ weight & Constant & Coherent $1$-local, detect & $1/(\lambda\Delta)$ (with constant $\Delta$) \\ \hline
+\textbf{EPS (this work)} & \textbf{Analog} & \textbf{Penalty + detection} & \textbf{Geom.\ $2$-local, const.\ weight} & \textbf{Constant} & \textbf{Coherent $1$-local, detect} & $\mathbf{1/(\lambda^2\Delta^2)}$ (with constant $\Delta$) \\ \hline \hline
+\end{tabular}%
+}
+\end{table}
+\sy{too small, add STAR}
+
+\paragraph{Energy gap error protection.}
+The idea of protecting Hamiltonian-based adiabatic computation by penalizing leakage with a stabilizer-derived energy gap originates in this line~\cite{jordan2006error,young2013error,bookatz2015error}. A central obstruction is that purely $2$-local commuting penalties cannot, suppress arbitrary $1$-local errors within their ground space, which motivates high-weight or subsystem-code constructions~\cite{marvian2017error}. EPS circumvents this by co-designing the qLDPC code as one of the excited subspaces of a geometrically $2$-local penalty Hamiltonian. This advancement provides both hardware compatibility and energy scale issues.
+
+\paragraph{Bosonic codes.}
+Bosonic encodings such as cat codes~\cite{gottesman2001encoding,mirrahimi2014dynamically} are hardware-efficient in the sense of using the large Hilbert space of an oscillator, and protect against loss or dephasing error while biasing the other type. While GKP \sy{not been demonstrated and chanllenge to scale + hardware component is not ready yet} Compared to this line of research, EPS enables suppressing both types of dominant coherent noise in the abstract spin Hamiltonian systems during both memory and computation tasks. Further, it can be realized with standard planar and two-body couplers without any overhead. \sy{2D planar transmon with tunable coupler}
+
+\paragraph{Autonomous quantum error correction.}
+Autonomous QEC (AQEC) protects encoded information by engineering dissipation, so that the codespace is stabilized as a steady state of an open-system dynamics~\cite{lebreuilly2021autonomous,shtanko2025bounds}. These methods are also always-on and measurement-free, but it relies on engineered bath coupling to remove entropy and target stochastic decoherence.
+
+\paragraph{Complementary coherent-error mitigation.}
+Dynamical decoupling suppresses errors during \emph{idling} via a sequence of preset pulses~\cite{viola1999dynamical}. Error mitigation removes bias in expectation values through post-processing and sampling overhead~\cite{temme2017error,li2017efficient}. Decoherence-free subspaces passively encode against symmetric noise~\cite{lidar1998decoherence}. \sy{check compatibility}
+
+\paragraph{Robust analog simulation.}
+The closest prior work showed that quantum error-detecting codes can protect analog quantum dynamics from coherent noise, achieving a simulation infidelity that scales as $O(1/\lambda)$~\cite{cao2024robust}. EPS extends this framework along all three dimensions defined by our co-design criteria: a geometrically $2$-local, constant-weight penalty Hamiltonian achieving quadratic suppression capability improvement; constant-rate code families, including the $[[2n,n,2]]$ and cut-off $[[2n,n-1,2]]$ constructions; and a locality-preserving universal encoding, further generalized to two-dimensional architectures through modular perturbative gadgets.
+
+
+\sy{Potential further chapters: Details on code construction. Realistic quasi-static flux noise and required lambdas/g to mitigate it. Floquet technique for shared XX and ZZ edges.}
+
+
+\end{document}
+%
+% ****** End of file main.tex ******
