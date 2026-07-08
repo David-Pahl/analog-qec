@@ -278,12 +278,14 @@ class PlotConfig:
     xlim: Tuple[float, float] = (-math.log1p(-0.0002), 70)
     ylim: Tuple[float, float] = (2, 5e11)
     annotation_fontsize: int = 8
+    low_overhead_annotation_arrow_xy: Tuple[float, float] = (3.6e-4, 0.06)
+    low_overhead_annotation_text_xy: Tuple[float, float] = (0.45e-3, 0.22)
     raw_color: str = "#000000"
     eps_color: str = "#04CB93"
     eps_colors: Dict[float, str] = field(
         default_factory=lambda: {50: "#8FE3CD", 100: "#04CB93", 500: "#008F68"}
     )
-    raw_T1_limit_values_us: Tuple[float, ...] = ()
+    raw_T1_limit_values_us: Tuple[float, ...] = (100, 500)
     raw_T1_limit_include_crosstalk: bool = False
     raw_T1_limit_line_style: str = ":"
     raw_T1_limit_line_width: float = 1.2
@@ -295,14 +297,26 @@ class PlotConfig:
     raw_marker: str = "^"
     eps_marker: str = "o"
     eps_lambda_label_offsets: Dict[float, Tuple[int, int]] = field(
-        default_factory=lambda: {2: (-2, -14), 5: (0, 8), 10: (0, 8), 15: (0, 8)}
+        default_factory=lambda: {
+            0.1: (7, -6),
+            0.25: (-9, -5),
+            0.5: (-17, 0),
+            1: (-14, 1),
+            2: (-13, 3),
+            5: (-11, 4),
+        }
     )
     eps_curve_label_offsets: Dict[float, Tuple[int, int]] = field(
         default_factory=lambda: {50: (8, 8), 100: (8, 15), 500: (8, 22)}
     )
     eps_curve_label_offsets_by_metric: Dict[
         str, Dict[float, Tuple[int, int]]
-    ] = field(default_factory=lambda: {"space": {}, "time": {}})
+    ] = field(
+        default_factory=lambda: {
+            "space": {100: (5, 0), 500: (0, 10)},
+            "time": {100: (5, 0), 500: (0, 10)},
+        }
+    )
     surface_marker: str = "s"
     star_marker: str = "D"
     surface_colors: Dict[int, str] = field(
@@ -326,8 +340,9 @@ class PlotConfig:
     )
     raw_annotation_offsets: Dict[str, Tuple[int, int]] = field(
         default_factory=lambda: {
-            r"Raw $T_\phi=5\,\mu\mathrm{s}$": (10, 8),
+            r"Raw $T_\phi=5\,\mu\mathrm{s}$": (15, -10),
             r"Raw $T_\phi=10\,\mu\mathrm{s}$": (0, -10),
+            r"Raw $T_\phi=25\,\mu\mathrm{s}$": (5, -10),
             r"Raw $T_\phi=50\,\mu\mathrm{s}$": (10, 8),
         }
     )
@@ -354,7 +369,7 @@ class PlotConfig:
     )
     star_p_label_offsets_by_metric: Dict[str, Dict[float, Tuple[int, int]]] = field(
         default_factory=lambda: {
-            "space": {5e-5: (0, -64), 1e-4: (40, -64), 5e-4: (45, -64)},
+            "space": {5e-5: (0, -58), 1e-4: (40, -58), 5e-4: (55, -58)},
             "time": {5e-5: (0, -24), 1e-4: (40, -24), 5e-4: (45, -24)},
         }
     )

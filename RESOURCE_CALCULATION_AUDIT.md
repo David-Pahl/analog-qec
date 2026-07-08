@@ -328,6 +328,20 @@ lambda sweep, `dephasing_suppression_factor_by_lambda` can override the scalar
 fallback for individual lambda values. This is a rate-level suppression knob,
 distinct from the crosstalk angle-level suppression factor.
 
+The current notebook sensitivity sets the lambda-dependent residual-dephasing
+suppression factor with a single gap-like parameter `delta = 50`:
+
+```math
+s_\phi(\lambda,\Delta)
+=\frac{2}{3}\left[1+(\lambda\Delta)^2\right]^{-1}
++\frac{1}{3}(1+\lambda\Delta)^{-1}.
+```
+
+This suppression factor is applied to the pure-dephasing rate, not directly to
+the coherence time. The same lambda point is still charged the EPS runtime
+slowdown described below, so increasing lambda improves residual-dephasing
+suppression while increasing time cost and coherence exposure.
+
 EPS overhead:
 
 ```math
@@ -437,6 +451,13 @@ the scalar suppression factor for individual lambda values.
 \theta_\mathrm{EPS}
 =s_\mathrm{EPS}\theta_\mathrm{unsuppressed}.
 ```
+
+The current notebook sensitivity uses the same
+`s(lambda, Delta) = 2/[3(1+(lambda*Delta)^2)] + 1/[3(1+lambda*Delta)]` envelope
+for the EPS crosstalk angle that it uses for the residual pure-dephasing rate,
+with `Delta = 50` in the override cell. Since this suppression is applied to the
+angle, the small-angle crosstalk exponent scales approximately as
+`s(lambda, Delta)^2`.
 
 The coherent angle is then converted into a monotone Pauli-twirled envelope
 proxy:
@@ -875,8 +896,8 @@ phenomenological choice not backed by a paper in the current repo.
 | Crosstalk ratio normalization | `epsilon=J_xtalk/J_nom` | Internal normalization | Uses `J_nom=2*pi/t_2pi`, so the current benchmark has `J_nom*T_analog=20*2*pi`. |
 | Static vs drive-induced crosstalk | separate angle terms | Internal proxy | Static terms are always-on and improve with shorter runtime; drive-induced terms scale with control amplitude and may not improve when Raw runs faster. |
 | Crosstalk envelope conversion | `(1-exp(-theta^2/2))/2` | Literature motivated internal proxy | Based on Pauli-twirled coherent error power averaged over unresolved Gaussian angle/sign information; avoids revivals of a known single coherent rotation. |
-| EPS crosstalk suppression | angle-level factor `s_EPS` | Internal proxy | Small-angle `H_xtalk` scales approximately as `s_EPS^2`; `s_EPS=0` removes the modeled crosstalk. |
-| EPS residual dephasing | disabled by default | Internal sensitivity option | Set scalar or `T2_values_us`-aligned `dephasing_T_phi_us` and `dephasing_suppression_factor`, or `dephasing_suppression_factor_by_lambda` for an EPS lambda sweep, to add `s_phi/T_phi` to the EPS coherence rate; this is separate from crosstalk suppression. |
+| EPS crosstalk suppression | angle-level factor `s_EPS` | Internal proxy | Small-angle `H_xtalk` scales approximately as `s_EPS^2`; `s_EPS=0` removes the modeled crosstalk. The notebook sensitivity uses `s(lambda,Delta)=2/[3(1+(lambda*Delta)^2)]+1/[3(1+lambda*Delta)]` with `Delta=50`. |
+| EPS residual dephasing | disabled by default | Internal sensitivity option | Set scalar or `T2_values_us`-aligned `dephasing_T_phi_us` and `dephasing_suppression_factor`, or `dephasing_suppression_factor_by_lambda` for an EPS lambda sweep, to add `s_phi/T_phi` to the EPS coherence rate; this is separate from crosstalk suppression. The notebook sensitivity uses the same `s(lambda,Delta)` envelope as the crosstalk angle. |
 | EPS lambda sweep | disabled by default | Internal visualization option | Set `EPSConfig.lambda_values` to draw fixed-`T1` EPS curves with lambda markers; sweep values are penalty lambdas with runtime multiplier `1+lambda`, and default point count/values are unchanged when it is empty. |
 | Raw space overhead | 1 | Internal | Bare analog baseline. |
 | Raw time overhead | 1 | Internal | Bare analog baseline. |

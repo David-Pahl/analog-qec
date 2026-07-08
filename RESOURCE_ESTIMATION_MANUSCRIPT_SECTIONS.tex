@@ -1,0 +1,197 @@
+% LaTeX-ready resource-estimation section and appendix text.
+% The analog-qec checkout does not currently contain a tracked manuscript .tex
+% file, so this file is a drop-in source for the paper draft.
+
+\section{Performance comparison: resource estimation}
+\label{sec:resource-estimation}
+
+The preceding simulations show that excitation-preserving simulation (EPS) can
+suppress dephasing and approach the relaxation-limited coherence regime. We next
+ask whether this coherence gain remains favorable once it is charged against the
+space-time resources needed for a fixed observable-estimation task. We use a
+50-logical-spin XY benchmark with dimensionless evolution time
+\(Jt=20(2\pi)\). Taking \(t_{2\pi}=25\,\mathrm{ns}\) for a full \(2\pi\)
+interaction gives
+\begin{equation}
+T_{\mathrm{analog}}
+= \frac{Jt}{2\pi} t_{2\pi}
+=0.5\,\mu\mathrm{s}.
+\end{equation}
+The task is to estimate final XY energy density and radial transverse
+correlations from global \(X\) and global \(Y\) measurement bases. With the
+bounded-estimator rule
+\begin{equation}
+N_{\mathrm{shots/basis}}
+=\left\lceil \frac{\mathrm{Var}}{\epsilon^2}\right\rceil,
+\qquad
+\mathrm{Var}\le 1,\quad \epsilon=10^{-2},
+\end{equation}
+the comparison uses \(10^4\) shots per basis, or
+\(N_{\mathrm{task}}=2\times 10^4\) circuit executions.
+
+All points are placed on a common observable-sensitive error axis. For the
+lifetime-limited branches, the coherence contribution is
+\begin{equation}
+H_{\mathrm{coh}}
+= n_{\mathrm{eff}} T_{\mathrm{arch}}/T_{2,\mathrm{eff}},
+\qquad
+P_{\mathrm{err}}=1-\exp(-H),
+\end{equation}
+where \(n_{\mathrm{eff}}=10\) for the energy-density plus radial-correlation
+task. This is a phenomenological observable-sensitivity factor: it is smaller
+than the full 50-spin register-survival criterion, but larger than the local
+scale relevant to energy density alone. Raw analog points use the dephasing
+dominated relation
+\begin{equation}
+\frac{1}{T_2}=\frac{1}{2T_1}+\frac{1}{T_\phi}
+\simeq \frac{1}{T_\phi},
+\end{equation}
+so their labels quote \(T_\phi\). EPS points quote \(T_1\) because the nominal
+EPS limit is \(T_2=2T_1\). When residual pure dephasing is included, we instead
+use
+\begin{equation}
+\frac{1}{T_{2,\mathrm{EPS,eff}}}
+=\frac{1}{2T_1}
++\frac{s_\phi(\lambda,\Delta)}{T_{\phi,\mathrm{source}}}.
+\label{eq:eps-residual-dephasing}
+\end{equation}
+
+The EPS lambda sweep charges the slowdown explicitly:
+\begin{equation}
+T_{\mathrm{EPS}}
+=(1+\lambda)T_{\mathrm{analog}}.
+\label{eq:eps-lambda-slowdown}
+\end{equation}
+The same sweep suppresses residual dephasing and coherent crosstalk through the
+phenomenological envelope
+\begin{equation}
+s(\lambda,\Delta)
+=\frac{2}{3}\left[1+(\lambda\Delta)^2\right]^{-1}
++\frac{1}{3}(1+\lambda\Delta)^{-1},
+\label{eq:lambda-delta-suppression}
+\end{equation}
+with \(\Delta=50\) in the plotted sensitivity curves. Increasing \(\lambda\)
+therefore has two competing effects: it increases task time and coherence
+exposure through Eq.~\eqref{eq:eps-lambda-slowdown}, while decreasing residual
+dephasing and crosstalk through Eq.~\eqref{eq:lambda-delta-suppression}.
+
+We also include a coherent-crosstalk sensitivity term for Raw and EPS. The total
+Raw/EPS exponent is
+\begin{equation}
+H = H_{\mathrm{coh}} + H_{\mathrm{xtalk}}.
+\end{equation}
+Crosstalk strengths are normalized as fractional Hamiltonian errors relative to
+\(J_{\mathrm{nom}}=2\pi/t_{2\pi}\). Static crosstalk and drive-induced crosstalk
+accumulate angles
+\begin{equation}
+\theta_{\mathrm{static}}
+=\epsilon_{\mathrm{static}}J_{\mathrm{nom}}T_{\mathrm{arch}},
+\qquad
+\theta_{\mathrm{drive}}
+=\epsilon_{\mathrm{drive}}c_{\mathrm{ctrl}}J_{\mathrm{nom}}T_{\mathrm{arch}}.
+\end{equation}
+For EPS, the unresolved coherent angle is suppressed at the angle level,
+\begin{equation}
+\theta_{\mathrm{xtalk,EPS}}
+=s_{\mathrm{xtalk}}(\lambda,\Delta)
+\sqrt{\theta_{\mathrm{static}}^2+\theta_{\mathrm{drive}}^2},
+\end{equation}
+and then mapped to a monotone twirled-envelope proxy,
+\begin{equation}
+p_{\mathrm{xtalk}}
+=\frac{1-\exp(-\theta_{\mathrm{xtalk}}^2/2)}{2},
+\qquad
+H_{\mathrm{xtalk}}
+=n_{\mathrm{eff,xtalk}}p_{\mathrm{xtalk}}.
+\end{equation}
+This term is a sensitivity model for unresolved coherent Hamiltonian error, not
+a microscopic simulation of a specified crosstalk Hamiltonian.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/figure_5_resource_estimation_stacked.pdf}
+    \caption{Phenomenological resource-error comparison for a 50-logical-spin
+    analog benchmark. The horizontal axis gives the cumulative
+    observable-sensitive error exponent \(H\), with the corresponding proxy
+    error probability \(P_{\mathrm{err}}=1-\exp(-H)\). The vertical axes show the
+    task-level physical-space and physical-time costs after multiplying each
+    circuit by the \(2\times10^4\) measurements required by the stated
+    observable-estimation task. Raw points are labeled by \(T_\phi\), while EPS
+    points are labeled by the relaxation-limited \(T_1\). EPS sensitivity curves
+    include the lambda-dependent runtime slowdown, residual dephasing rate, and
+    coherent-crosstalk envelope described in the text. STAR and surface-code
+    baselines use optimistic, competitor-favorable assumptions.}
+    \label{fig:resource-estimation}
+\end{figure}
+
+Figure~\ref{fig:resource-estimation} shows the resulting tradeoff. Raw analog
+simulation has minimal time and space overhead, but its error exponent remains
+large when the transverse lifetime is dephasing dominated and when coherent
+crosstalk is not suppressed. EPS pays a small space overhead and, along the
+lambda sweep, a controlled runtime slowdown. In return, it moves toward the
+relaxation-limited coherence regime and suppresses the modeled residual
+dephasing and crosstalk terms. The STAR and surface-code baselines are given
+optimistic encoded assumptions: compact STAR blocks, no extra routing penalty,
+optimistic surface-code suppression factors, and a small factory-area model.
+Under these assumptions, EPS occupies a low-overhead, low-exponent regime for
+this observable-estimation task.
+
+\section{Resource-estimate model details}
+\label{app:resource-estimate-details}
+
+This appendix summarizes the calculation behind
+Fig.~\ref{fig:resource-estimation}. The plotted time and space-time values are
+task-level quantities. For a single circuit with architecture time
+\(T_{\mathrm{arch}}\) and physical-qubit count \(n\),
+\begin{equation}
+T_{\mathrm{task}}=N_{\mathrm{task}}T_{\mathrm{arch}},
+\qquad
+nT_{\mathrm{task}}=N_{\mathrm{task}}nT_{\mathrm{arch}}.
+\end{equation}
+The default task uses two global measurement bases and
+\(N_{\mathrm{shots/basis}}=\lceil \mathrm{Var}/\epsilon^2\rceil=10^4\), giving
+\(N_{\mathrm{task}}=2\times 10^4\).
+
+For Raw analog simulation,
+\begin{equation}
+T_{\mathrm{Raw}}=T_{\mathrm{analog}},
+\qquad
+n_{\mathrm{Raw}}=n_{\mathrm{logical}},
+\qquad
+H_{\mathrm{Raw}}=
+n_{\mathrm{eff}}T_{\mathrm{Raw}}
+\left(\frac{1}{2T_1}+\frac{1}{T_\phi}\right)
++H_{\mathrm{xtalk}}.
+\end{equation}
+In the plotted dephasing-dominated regime this reduces to
+\(H_{\mathrm{Raw}}\simeq n_{\mathrm{eff}}T_{\mathrm{analog}}/T_\phi
++H_{\mathrm{xtalk}}\).
+
+For EPS,
+\begin{equation}
+n_{\mathrm{EPS}}=2n_{\mathrm{logical}},
+\qquad
+T_{\mathrm{EPS}}=(1+\lambda)T_{\mathrm{analog}},
+\end{equation}
+and
+\begin{equation}
+H_{\mathrm{EPS}}
+=n_{\mathrm{eff}}T_{\mathrm{EPS}}
+\left(\frac{1}{2T_1}
++\frac{s_\phi(\lambda,\Delta)}{T_{\phi,\mathrm{source}}}\right)
++H_{\mathrm{xtalk}}.
+\end{equation}
+The crosstalk term uses the same angle-envelope model as in the main text, with
+\(s_{\mathrm{xtalk}}(\lambda,\Delta)=s_\phi(\lambda,\Delta)\) for the current
+sensitivity curves.
+
+Surface-code points use an edge-colored Trotterization of the same \(Jt\), an
+optimistic QEC-cycle conversion, and a logical-lifetime scaling model. STAR
+points use the same Trotterized rotation count but replace Clifford+\(T\)
+synthesis with injected analog-rotation resources. The STAR exponent is first
+computed as a full-register rotation-plus-Clifford operation budget and then
+scaled by \(n_{\mathrm{eff}}/n_{\mathrm{logical}}\) so that all schemes share
+the same observable-sensitive error axis. The encoded baselines are therefore
+not complete architecture-level resource counts; they are deliberately
+competitor-favorable reference points for judging whether the EPS regime remains
+plausibly useful under optimistic encoded assumptions.

@@ -423,7 +423,7 @@ def _eps_label(
 ) -> str:
     label = f"EPS T1={T1_eps:g}us"
     if include_dephasing_T_phi and dephasing_T_phi_us is not None:
-        label = f"{label}, Tφ={dephasing_T_phi_us:g}us"
+        label = rf"{label}, $T_\phi={dephasing_T_phi_us:g}\,\mu\mathrm{{s}}$"
     return label
 
 

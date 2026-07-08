@@ -490,10 +490,12 @@ def _format_axes(
     else:
         ax.set_xlabel("")
     ax.set_ylabel(_y_axis_label(y_metric))
+    arrow_x, arrow_y_fraction = config.low_overhead_annotation_arrow_xy
+    text_x, text_y_fraction = config.low_overhead_annotation_text_xy
     ax.annotate(
         "Low error,\nLow overhead",
-        xy=(4e-4, _log_lerp(ylim, 0.10)),
-        xytext=(0.5e-3, _log_lerp(ylim, 0.25)),
+        xy=(arrow_x, _log_lerp(ylim, arrow_y_fraction)),
+        xytext=(text_x, _log_lerp(ylim, text_y_fraction)),
         arrowprops=dict(arrowstyle="->", color="0.35", lw=1.0),
         color="k",
         fontsize=9,
